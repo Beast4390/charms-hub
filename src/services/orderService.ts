@@ -88,12 +88,29 @@ export async function createOrder(params: {
     updated_at: now,
   };
 
-  // 4. Save to Supabase if configured
+  // 4. Save to Supabase if configured.
+  // The `items` array exists only in the client types (backed by the
+  // order_items table) — it must be stripped before inserting
+  // orders/invoices, which have no such column.
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from('orders').insert([order]);
-      await supabase.from('order_items').insert(itemSnapshots);
-      await supabase.from('invoices').insert([invoice]);
+      const { items: _orderItems, ...orderRecord } = order;
+      const { items: _invoiceItems, ...invoiceRecord } = invoice;
+
+      const orderResult = await supabase.from('orders').insert([orderRecord]);
+      if (orderResult.error) {
+        console.error('Supabase order insert failed:', orderResult.error.message);
+      } else {
+        const itemsResult = await supabase.from('order_items').insert(itemSnapshots);
+        if (itemsResult.error) {
+          console.error('Supabase order_items insert failed:', itemsResult.error.message);
+        }
+
+        const invoiceResult = await supabase.from('invoices').insert([invoiceRecord]);
+        if (invoiceResult.error) {
+          console.error('Supabase invoice insert failed:', invoiceResult.error.message);
+        }
+      }
     } catch (err) {
       console.warn('Supabase order insert failed, saving to local store:', err);
     }
@@ -141,6 +158,33 @@ export async function createOrder(params: {
   return { order, invoice };
 }
 
+// Cloud order rows carry no items column — hydrate the immutable
+// snapshots from order_items so callers (order history, invoices)
+// see the same shape as local records.
+async function hydrateOrderItems(orders: Order[]): Promise<Order[]> {
+  if (!supabase || orders.length === 0) return orders;
+  try {
+    const { data, error } = await supabase
+      .from('order_items')
+      .select('*')
+      .in('order_id', orders.map((o) => o.id));
+    if (error || !data) {
+      console.warn('Failed to load order_items from cloud:', error?.message);
+      return orders;
+    }
+    const byOrder = new Map<string, OrderItemSnapshot[]>();
+    for (const item of data as OrderItemSnapshot[]) {
+      const list = byOrder.get(item.order_id) || [];
+      list.push(item);
+      byOrder.set(item.order_id, list);
+    }
+    return orders.map((o) => ({ ...o, items: byOrder.get(o.id) || o.items || [] }));
+  } catch (err) {
+    console.warn('Failed to hydrate order items from cloud:', err);
+    return orders;
+  }
+}
+
 // Customer Isolation: Only retrieve orders belonging to userId
 export async function getOrdersByUser(userId: string): Promise<Order[]> {
   if (isSupabaseConfigured && supabase) {
@@ -151,7 +195,7 @@ export async function getOrdersByUser(userId: string): Promise<Order[]> {
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
       if (!error && data && data.length > 0) {
-        return data as Order[];
+        return hydrateOrderItems(data as Order[]);
       }
     } catch (err) {
       console.warn('Supabase query failed, falling back to local store:', err);
@@ -180,7 +224,7 @@ export async function getAllOrders(roleOrUser: UserRole | { role: UserRole }): P
         .select('*')
         .order('created_at', { ascending: false });
       if (!error && data && data.length > 0) {
-        return data as Order[];
+        return hydrateOrderItems(data as Order[]);
       }
     } catch (err) {
       console.warn('Supabase query failed, falling back to local store:', err);

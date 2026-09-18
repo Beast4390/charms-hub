@@ -1,0 +1,601 @@
+[
+  {
+    "id": "prod-pookia-mystery-scoop",
+    "name": "Pookia Mystery scoop",
+    "category": "Mystery Scoop",
+    "current_image": "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/mystery-scoop/pookia-mystery-scoop.webp",
+    "additional_images": [],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1774113211458.webp",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/mystery-scoop/pookia-mystery-scoop.webp)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-mini-mystery-scoop",
+    "name": "Mini mystery scoop",
+    "category": "Mystery Scoop",
+    "current_image": "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/mystery-scoop/mini-mystery-scoop.webp",
+    "additional_images": [],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1766666281778.webp",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/mystery-scoop/mini-mystery-scoop.webp)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-anti-tarnish-mystery-scoop",
+    "name": "Anti-tarnish Jewelry Mystery scoop",
+    "category": "Mystery Scoop",
+    "current_image": "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/mystery-scoop/anti-tarnish-jewelry-mystery-scoop.webp",
+    "additional_images": [],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1773689527693.webp",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/mystery-scoop/anti-tarnish-jewelry-mystery-scoop.webp)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-luxury-mystery-scoop",
+    "name": "Luxury Mystery scoop",
+    "category": "Mystery Scoop",
+    "current_image": "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/mystery-scoop/luxury-mystery-scoop.jpg",
+    "additional_images": [],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1766666787130.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/mystery-scoop/luxury-mystery-scoop.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-kashmiri-earring-7",
+    "name": "Kashmiri Earring - Design 7",
+    "category": "Earrings",
+    "current_image": "https://images.unsplash.com/photo-1630019852942-f89202989a59?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/earrings/kashmiri-earring-design-7.webp",
+    "additional_images": [],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1772271069165.webp",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/earrings/kashmiri-earring-design-7.webp)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-kashmiri-earring-6",
+    "name": "Kashmiri Earring - Design 6",
+    "category": "Earrings",
+    "current_image": "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/earrings/kashmiri-earring-design-6.webp",
+    "additional_images": [],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1772270956001.webp",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/earrings/kashmiri-earring-design-6.webp)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-kashmiri-earring-5",
+    "name": "Kashmiri Earring - Design 5",
+    "category": "Earrings",
+    "current_image": "https://images.unsplash.com/photo-1596944924616-7b38e7cfac36?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/earrings/kashmiri-earring-design-5.jpg",
+    "additional_images": [
+      "/products/earrings/kashmiri-earring-design-5-1.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1766160503556.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/earrings/kashmiri-earring-design-5.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-kashmiri-earring-4",
+    "name": "Kashmiri Earring - Design 4",
+    "category": "Earrings",
+    "current_image": "https://images.unsplash.com/photo-1617038220319-276d3cfab638?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/earrings/kashmiri-earring-design-4.jpg",
+    "additional_images": [
+      "/products/earrings/kashmiri-earring-design-4-1.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1766160482703.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/earrings/kashmiri-earring-design-4.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-kashmiri-earring-3",
+    "name": "Kashmiri Earring - Design 3",
+    "category": "Earrings",
+    "current_image": "https://images.unsplash.com/photo-1544441893-675973e31985?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/earrings/kashmiri-earring-design-3.jpg",
+    "additional_images": [
+      "/products/earrings/kashmiri-earring-design-3-1.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1766160460500.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/earrings/kashmiri-earring-design-3.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-kashmiri-earring-2",
+    "name": "Kashmiri Earring - Design 2",
+    "category": "Earrings",
+    "current_image": "https://images.unsplash.com/photo-1506630448388-4e683c67ddb0?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/earrings/kashmiri-earring-design-2.jpg",
+    "additional_images": [
+      "/products/earrings/kashmiri-earring-design-2-1.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1766160438178.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/earrings/kashmiri-earring-design-2.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-kashmiri-earring-1",
+    "name": "Kashmiri Earring - Design 1",
+    "category": "Earrings",
+    "current_image": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/earrings/kashmiri-earring-design-1.jpg",
+    "additional_images": [
+      "/products/earrings/kashmiri-earring-design-1-1.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1766160412102.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/earrings/kashmiri-earring-design-1.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-solar-daisy-charm-bangle",
+    "name": "The Solar Daisy Charm Bangle",
+    "category": "Bracelets",
+    "current_image": "https://images.unsplash.com/photo-1611591475878-29e28f321473?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/bracelets/the-solar-daisy-charm-bangle.webp",
+    "additional_images": [],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1773590674930.webp",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/bracelets/the-solar-daisy-charm-bangle.webp)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-triple-row-geometric-bangle",
+    "name": "The Triple-Row Geometric Lattice Bangle",
+    "category": "Bracelets",
+    "current_image": "https://images.unsplash.com/photo-1599643477877-530eb83abc8e?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/bracelets/the-triple-row-geometric-lattice-bangle.webp",
+    "additional_images": [],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1773590600720.webp",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/bracelets/the-triple-row-geometric-lattice-bangle.webp)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-the-silver-wave-bracelet",
+    "name": "The Silver Wave Bracelet",
+    "category": "Bracelets",
+    "current_image": "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/bracelets/the-silver-wave-bracelet.jpg",
+    "additional_images": [
+      "/products/bracelets/the-silver-wave-bracelet-1.jpg",
+      "/products/bracelets/the-silver-wave-bracelet-2.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1766221744539.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/bracelets/the-silver-wave-bracelet.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-the-greek-key-bracelet",
+    "name": "The Greek Key Bracelet",
+    "category": "Bracelets",
+    "current_image": "https://images.unsplash.com/photo-1611591475878-29e28f321473?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/bracelets/the-greek-key-bracelet.jpg",
+    "additional_images": [
+      "/products/bracelets/the-greek-key-bracelet-1.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1766222033880.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/bracelets/the-greek-key-bracelet.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-gucci-bracelet",
+    "name": "GUCCI Bracelet",
+    "category": "Bracelets",
+    "current_image": "https://images.unsplash.com/photo-1599643477877-530eb83abc8e?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/bracelets/gucci-bracelet.jpg",
+    "additional_images": [],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1766221848111.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/bracelets/gucci-bracelet.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-love-heartbeat-bracelet",
+    "name": "Love heartbeat Bracelet",
+    "category": "Bracelets",
+    "current_image": "https://images.unsplash.com/photo-1611591475878-29e28f321473?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/bracelets/love-heartbeat-bracelet.jpg",
+    "additional_images": [],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1766310899156.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/bracelets/love-heartbeat-bracelet.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-infinity-bracelet",
+    "name": "Infinity Bracelet",
+    "category": "Bracelets",
+    "current_image": "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/bracelets/infinity-bracelet.jpg",
+    "additional_images": [],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1766310847917.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/bracelets/infinity-bracelet.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-princess-crown-bracelet",
+    "name": "Princess Crown Bracelet",
+    "category": "Bracelets",
+    "current_image": "https://images.unsplash.com/photo-1611591475878-29e28f321473?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/bracelets/princess-crown-bracelet.jpg",
+    "additional_images": [],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1766310821613.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/bracelets/princess-crown-bracelet.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-travelling-makeup-organizer",
+    "name": "Travelling Makeup Organizer",
+    "category": "Organizers",
+    "current_image": "https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/organizers/travelling-makeup-organizer.jpg",
+    "additional_images": [
+      "/products/organizers/travelling-makeup-organizer-1.jpg",
+      "/products/organizers/travelling-makeup-organizer-2.jpg",
+      "/products/organizers/travelling-makeup-organizer-3.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1773230077390.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/organizers/travelling-makeup-organizer.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-5-in-1-rose-ring-box",
+    "name": "5 in 1 Rose Ring Gift Box",
+    "category": "Unique Products",
+    "current_image": "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/organizers/5-in-1-rose-ring-gift-box.jpg",
+    "additional_images": [
+      "/products/organizers/5-in-1-rose-ring-gift-box-1.jpg",
+      "/products/organizers/5-in-1-rose-ring-gift-box-2.jpg",
+      "/products/organizers/5-in-1-rose-ring-gift-box-3.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1770205480631.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/organizers/5-in-1-rose-ring-gift-box.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-square-rose-gift-box",
+    "name": "Square Rose Gift Box with Jewelry",
+    "category": "Unique Products",
+    "current_image": "https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/organizers/square-rose-gift-box-with-jewelry.webp",
+    "additional_images": [
+      "/products/organizers/square-rose-gift-box-with-jewelry-1.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1770533865350.webp",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/organizers/square-rose-gift-box-with-jewelry.webp)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-round-rose-rotating-box",
+    "name": "Round Rose Rotating Jewelry box with Locket",
+    "category": "Unique Products",
+    "current_image": "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/organizers/round-rose-rotating-jewelry-box-with-locket.jpg",
+    "additional_images": [
+      "/products/organizers/round-rose-rotating-jewelry-box-with-locket-1.jpg",
+      "/products/organizers/round-rose-rotating-jewelry-box-with-locket-2.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1770204513190.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/organizers/round-rose-rotating-jewelry-box-with-locket.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-jewelry-book",
+    "name": "Jewelry Book",
+    "category": "Organizers",
+    "current_image": "https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/organizers/jewelry-book.jpg",
+    "additional_images": [
+      "/products/organizers/jewelry-book-1.jpg",
+      "/products/organizers/jewelry-book-2.jpg",
+      "/products/organizers/jewelry-book-3.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1768131305224.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/organizers/jewelry-book.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-3d-pouch-organizer",
+    "name": "3D Pouch Jewelry Organizer",
+    "category": "Organizers",
+    "current_image": "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/organizers/3d-pouch-jewelry-organizer.jpg",
+    "additional_images": [],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1768131416859.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/organizers/3d-pouch-jewelry-organizer.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-glue-pen",
+    "name": "Glue Pen",
+    "category": "Quirky Stationery",
+    "current_image": "https://images.unsplash.com/photo-1585336261026-7f0535359a93?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/stationery/glue-pen.jpg",
+    "additional_images": [
+      "/products/stationery/glue-pen-1.jpg",
+      "/products/stationery/glue-pen-2.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1771230299910.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/stationery/glue-pen.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-numbing-cream-earrings",
+    "name": "Numbing cream for Earrings",
+    "category": "Unique Products",
+    "current_image": "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/organizers/numbing-cream-for-earrings.jpg",
+    "additional_images": [],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1770311193668.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/organizers/numbing-cream-for-earrings.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-pokemon-sharpener",
+    "name": "Pok\u00e9mon sharpener",
+    "category": "Quirky Stationery",
+    "current_image": "https://images.unsplash.com/photo-1618336753974-aae8e04506aa?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/stationery/pokemon-sharpener.jpg",
+    "additional_images": [],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1770192084146.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/stationery/pokemon-sharpener.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-mickey-mouse-sharpeners",
+    "name": "Mickey Mouse sharpeners",
+    "category": "Quirky Stationery",
+    "current_image": "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/stationery/mickey-mouse-sharpeners.jpg",
+    "additional_images": [
+      "/products/stationery/mickey-mouse-sharpeners-1.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1770192048388.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/stationery/mickey-mouse-sharpeners.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-3d-chocolate-erasers",
+    "name": "3D Chocolate Erasers (Pack of 4)",
+    "category": "Quirky Stationery",
+    "current_image": "https://images.unsplash.com/photo-1511381939415-e44015466834?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/stationery/3d-chocolate-erasers-pack-of-4.jpg",
+    "additional_images": [
+      "/products/stationery/3d-chocolate-erasers-pack-of-4-1.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1770184763756.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/stationery/3d-chocolate-erasers-pack-of-4.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-vine-wrapped-solitaire-ring",
+    "name": "Vine Wrapped Solitaire Ring",
+    "category": "Rings",
+    "current_image": "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/rings/vine-wrapped-solitaire-ring.jpg",
+    "additional_images": [
+      "/products/rings/vine-wrapped-solitaire-ring-1.jpg",
+      "/products/rings/vine-wrapped-solitaire-ring-2.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1766140013345.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/rings/vine-wrapped-solitaire-ring.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-lush-solitaire-ring",
+    "name": "Lush Solitaire Ring",
+    "category": "Rings",
+    "current_image": "https://images.unsplash.com/photo-1603561591411-07134e71a2a9?w=600&auto=format&fit=crop&q=80",
+    "new_image": "",
+    "additional_images": [],
+    "source_url": "",
+    "ref_match": "No exact live Charms Hub reference match found",
+    "status": "UNVERIFIED",
+    "action": "Set reference_verified=false, display clean placeholder UI",
+    "reference_verified": false
+  },
+  {
+    "id": "prod-petal-solitaire-ring",
+    "name": "Petal solitaire Ring",
+    "category": "Rings",
+    "current_image": "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/rings/petal-solitaire-ring.jpg",
+    "additional_images": [
+      "/products/rings/petal-solitaire-ring-1.jpg",
+      "/products/rings/petal-solitaire-ring-2.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1766139684535.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/rings/petal-solitaire-ring.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-fairytale-tiara-ring",
+    "name": "Fairytale Tiara Solitaire Ring",
+    "category": "Rings",
+    "current_image": "https://images.unsplash.com/photo-1603561591411-07134e71a2a9?w=600&auto=format&fit=crop&q=80",
+    "new_image": "",
+    "additional_images": [],
+    "source_url": "",
+    "ref_match": "No exact live Charms Hub reference match found",
+    "status": "UNVERIFIED",
+    "action": "Set reference_verified=false, display clean placeholder UI",
+    "reference_verified": false
+  },
+  {
+    "id": "prod-mini-floral-hairpins-pairs",
+    "name": "Mini Floral Hairpins Pairs",
+    "category": "Hair Accessories",
+    "current_image": "",
+    "new_image": "/products/hair-accessories/mini-floral-hairpins-pairs.jpg",
+    "additional_images": [
+      "/products/hair-accessories/mini-floral-hairpins-pairs-1.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1769321020387.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/hair-accessories/mini-floral-hairpins-pairs.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-hawaiian-flower-claws-small",
+    "name": "Hawaiian Flower Claws (Small)",
+    "category": "Hair Accessories",
+    "current_image": "https://images.unsplash.com/photo-1590159763121-7c9ff3149e0a?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/hair-accessories/hawaiian-flower-claws-small.jpg",
+    "additional_images": [
+      "/products/hair-accessories/hawaiian-flower-claws-small-1.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1766329131909.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/hair-accessories/hawaiian-flower-claws-small.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-korean-pearl-hairband",
+    "name": "Korean Pearl Hairband",
+    "category": "Hair Accessories",
+    "current_image": "",
+    "new_image": "/products/hair-accessories/korean-pearl-hairband.jpg",
+    "additional_images": [
+      "/products/hair-accessories/korean-pearl-hairband-1.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1768373393300.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/hair-accessories/korean-pearl-hairband.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-korean-rosette-bow-pin",
+    "name": "Korean Rosette Bow Pin",
+    "category": "Hair Accessories",
+    "current_image": "",
+    "new_image": "/products/hair-accessories/korean-rosette-bow-pin.jpg",
+    "additional_images": [],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1765806417306.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/hair-accessories/korean-rosette-bow-pin.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-shinchan-mood-swing-keychain",
+    "name": "Shinchan Mood Swing Toy Keychain",
+    "category": "Quirky Keychains",
+    "current_image": "https://images.unsplash.com/photo-1614036417651-efe5912149d8?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/keychains/shinchan-mood-swing-toy-keychain.jpg",
+    "additional_images": [
+      "/products/keychains/shinchan-mood-swing-toy-keychain-1.jpg"
+    ],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1767529867649.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/keychains/shinchan-mood-swing-toy-keychain.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-mirror-evil-eye-keychain",
+    "name": "Mirror Evil Eye Keychain",
+    "category": "Quirky Keychains",
+    "current_image": "https://images.unsplash.com/photo-1614036417651-efe5912149d8?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/keychains/mirror-evil-eye-keychain.jpg",
+    "additional_images": [],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1768036482548.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/keychains/mirror-evil-eye-keychain.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-triple-evil-eye-keychain",
+    "name": "Triple Evil Eye Keychain",
+    "category": "Quirky Keychains",
+    "current_image": "https://images.unsplash.com/photo-1614036417651-efe5912149d8?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/keychains/triple-evil-eye-keychain.jpg",
+    "additional_images": [],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1768036378291.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/keychains/triple-evil-eye-keychain.jpg)",
+    "reference_verified": true
+  },
+  {
+    "id": "prod-camera-projector-keychain",
+    "name": "Camera Projector Keychain",
+    "category": "Quirky Keychains",
+    "current_image": "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=600&auto=format&fit=crop&q=80",
+    "new_image": "/products/keychains/camera-projector-keychain.jpg",
+    "additional_images": [],
+    "source_url": "https://d28arj6mdig261.cloudfront.net/1766043106625.jpg",
+    "ref_match": "Live Charms Hub: None",
+    "status": "VERIFIED",
+    "action": "Replaced stock image with authentic asset (/products/keychains/camera-projector-keychain.jpg)",
+    "reference_verified": true
+  }
+]

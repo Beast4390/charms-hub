@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { getUserOrders, getInvoiceByOrderId } from '../../services/orderService';
+import { getOrdersByUser, getInvoiceByOrderId } from '../../services/orderService';
 import { downloadInvoicePDF } from '../../services/invoiceGenerator';
 import { Order, Invoice } from '../../types';
 import {
@@ -42,7 +42,7 @@ export const AccountPage: React.FC = () => {
     const loadData = async () => {
       setLoading(true);
       try {
-        const userOrders = await getUserOrders(user.id, user);
+        const userOrders = await getOrdersByUser(user.id);
         setOrders(userOrders);
 
         // Fetch invoice for each order
@@ -284,7 +284,7 @@ export const AccountPage: React.FC = () => {
                       <button
                         onClick={() => handleDownloadInvoice(order.id)}
                         className="px-3 py-1.5 rounded-full bg-[#FFD2C2]/40 dark:bg-[#7A1921] hover:bg-[#FFD2C2] text-[#2B1810] dark:text-[#F1E194] text-xs font-bold flex items-center gap-1.5 transition cursor-pointer border border-[#F3DDD5] dark:border-[#8F1F28]"
-                        title="Download GST Invoice"
+                        title="Download Invoice"
                       >
                         <Download className="w-3.5 h-3.5 text-[#789A99] dark:text-[#F1E194]" />
                         <span>PDF Invoice</span>

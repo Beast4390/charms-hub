@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
@@ -47,8 +47,17 @@ export const CartPage: React.FC = () => {
   const [instagramHandle, setInstagramHandle] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'cod'>('online');
   const [submitting, setSubmitting] = useState(false);
+  const [orderError, setOrderError] = useState('');
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
   const [createdInvoice, setCreatedInvoice] = useState<Invoice | null>(null);
+
+  // Replay protection: one stable key per checkout session, so a retry
+  // after a network hiccup can never create a second order.
+  const idempotencyKey = useRef<string>(
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `cart_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`
+  );
 
   const shippingCost = isFreeShipping ? 0 : 50;
   const grandTotal = subtotal + shippingCost;
@@ -66,6 +75,7 @@ export const CartPage: React.FC = () => {
 
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    setOrderError('');
     if (cart.length === 0) return;
 
     if (!isAuthenticated || !user) {
@@ -76,10 +86,16 @@ export const CartPage: React.FC = () => {
     setSubmitting(true);
 
     try {
+      // Secure server-side transaction: the database fetches current prices,
+      // validates stock/availability and computes ALL monetary values.
+      // Client-side totals below are estimates only.
       const result = await createOrder({
-        userId: user.id,
-        userEmail: user.email,
-        customerName: customerName || user.full_name || 'Customer',
+        items: cart.map((i) => ({
+          product_id: i.product.id,
+          quantity: i.quantity,
+          selected_variant: i.selected_variant,
+        })),
+        paymentMethod: paymentMethod === 'cod' ? 'Cash on Delivery' : 'Online / UPI',
         shippingDetails: {
           fullName: customerName || user.full_name || 'Customer',
           phone,
@@ -90,33 +106,31 @@ export const CartPage: React.FC = () => {
           pincode,
           landmark: instagramHandle ? `IG: @${instagramHandle}` : undefined,
         },
-        paymentMethod: paymentMethod === 'cod' ? 'Cash on Delivery' : 'Online / UPI',
-        cartItems: cart,
-        subtotal,
-        discountAmount: 0,
-        shippingAmount: shippingCost,
-        totalAmount: grandTotal,
+        idempotencyKey: idempotencyKey.current,
       });
 
-      if (result && result.order) {
+      if (result.success && result.order) {
         setCreatedOrder(result.order);
         setCreatedInvoice(result.invoice || null);
         clearCart();
 
-        // Also prepare WhatsApp inquiry message for convenience
-        const itemsSummary = cart
+        // Authoritative stored values (never the pre-checkout estimates)
+        const itemsSummary = (result.order.items || [])
           .map(
-            (i, idx) =>
-              `${idx + 1}. ${i.product.name} (Qty: ${i.quantity}) - ₹${i.product.price * i.quantity}`
+            (item, idx) =>
+              `${idx + 1}. ${item.product_name_snapshot} (Qty: ${item.quantity}) - ₹${item.line_total}`
           )
           .join('\n');
+        const storedSubtotal = result.order.subtotal;
+        const storedShipping = result.order.shipping_amount;
+        const storedTotal = result.order.total_amount;
 
-        const message = `🛍️ *NEW CONFIRMED ORDER - CHARMS HUB*
+        const message = `🛍️ *NEW ORDER - CHARMS HUB*
 Order ID: #${result.order.order_number}
 Invoice ID: #${result.invoice?.invoice_number || 'INV-PENDING'}
 
 *Customer Details:*
-• Name: ${customerName || user.full_name}
+• Name: ${result.order.customer_name}
 • Phone: ${phone}
 • Address: ${address}, ${city} - ${pincode}
 ${instagramHandle ? `• Instagram: @${instagramHandle.replace('@', '')} (Tag packaging video!)` : ''}
@@ -125,20 +139,19 @@ ${instagramHandle ? `• Instagram: @${instagramHandle.replace('@', '')} (Tag pa
 ${itemsSummary}
 
 *Payment Summary:*
-• Subtotal: ₹${subtotal}
-• Shipping: ${shippingCost === 0 ? 'FREE' : `₹${shippingCost}`}
-• Total Amount: *₹${grandTotal}*
-Status: ${result.order.status}
-
-Official store order created successfully!`;
+• Subtotal: ₹${storedSubtotal}
+• Shipping: ${storedShipping === 0 ? 'FREE' : `₹${storedShipping}`}
+• Total Amount: *₹${storedTotal}*
+Payment Status: ${result.order.payment_status}
+Status: ${result.order.status}`;
 
         // Open WhatsApp in new tab for direct support
         window.open(`https://wa.me/919876543210?text=${encodeURIComponent(message)}`, '_blank');
       } else {
-        alert('Failed to place order');
+        setOrderError(result.error || 'Failed to place order. Please try again.');
       }
     } catch (err: any) {
-      alert(err?.message || 'Error occurred while creating order');
+      setOrderError(err?.message || 'Error occurred while creating order');
     } finally {
       setSubmitting(false);
     }
@@ -172,20 +185,20 @@ Official store order created successfully!`;
         {/* Invoice Download Action Card */}
         {createdInvoice && (
           <div className="p-5 rounded-2xl bg-[#FFF8F5] dark:bg-[#5B0E14] border border-[#F3DDD5] dark:border-[#7A1921] max-w-md mx-auto text-left space-y-3 shadow-xs">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-[#789A99] dark:text-[#F1E194]" />
-                <span className="text-xs font-bold text-[#2B1810] dark:text-[#FCF7DC]">
-                  Invoice #{createdInvoice.invoice_number}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-[#789A99] dark:text-[#F1E194]" />
+                  <span className="text-xs font-bold text-[#2B1810] dark:text-[#FCF7DC]">
+                    Invoice #{createdInvoice.invoice_number}
+                  </span>
+                </div>
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
+                  Generated
                 </span>
               </div>
-              <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
-                GST Ready
-              </span>
-            </div>
-            <p className="text-xs text-gray-500 dark:text-stone-300">
-              Tax invoice including items breakdown, GST calculation, and shipping details.
-            </p>
+              <p className="text-xs text-gray-500 dark:text-stone-300">
+                Invoice with items breakdown, shipping details, and your stored order totals.
+              </p>
             <button
               onClick={handleDownloadInvoice}
               className="w-full py-2.5 px-4 rounded-xl bg-[#789A99] hover:bg-[#587978] text-white font-bold text-xs flex items-center justify-center gap-2 transition shadow-sm cursor-pointer"
@@ -538,7 +551,14 @@ Official store order created successfully!`;
               </div>
             </div>
 
-            {/* Price Breakdown */}
+            {/* Order Error Banner */}
+            {orderError && (
+              <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-300 text-xs">
+                {orderError}
+              </div>
+            )}
+
+            {/* Price Breakdown (estimates — final totals are computed server-side) */}
             <div className="pt-4 border-t border-[#F3DDD5] dark:border-[#7A1921] space-y-2 text-xs">
               <div className="flex justify-between text-gray-600 dark:text-stone-300">
                 <span>Items Subtotal</span>
@@ -551,7 +571,7 @@ Official store order created successfully!`;
                 </span>
               </div>
               <div className="flex justify-between text-sm font-extrabold text-[#2B1810] dark:text-[#FCF7DC] pt-2 border-t border-[#F3DDD5] dark:border-[#7A1921]">
-                <span>Total Payable</span>
+                <span>Total Payable (estimated)</span>
                 <span className="text-base text-[#789A99] dark:text-[#F1E194]">₹{grandTotal}</span>
               </div>
             </div>

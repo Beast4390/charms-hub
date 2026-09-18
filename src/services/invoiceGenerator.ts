@@ -33,9 +33,9 @@ export async function generateAndDownloadInvoicePDF(
   // INVOICE label
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
-  doc.text('TAX INVOICE', pageWidth - margin - 35, 14);
+  doc.text('INVOICE', pageWidth - margin - 35, 14);
   doc.setFontSize(8);
-  doc.text('ORIGINAL FOR RECIPIENT', pageWidth - margin - 40, 20);
+  doc.text('ELECTRONICALLY GENERATED', pageWidth - margin - 48, 20);
 
   y = 38;
 
@@ -55,9 +55,8 @@ export async function generateAndDownloadInvoicePDF(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.text('Charms Hub Official', rightColX, y + 5);
-  doc.text('Web: charms-hub.ai | Instagram: @charmshub_official', rightColX, y + 10);
+  doc.text('Online Store: charmshub.mart-24.com', rightColX, y + 10);
   doc.text('Customer Support: WhatsApp Helpdesk Available', rightColX, y + 15);
-  doc.text('GST / Registration: Verified E-Commerce Seller', rightColX, y + 20);
 
   y += 28;
 

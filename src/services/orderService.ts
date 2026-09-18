@@ -1,372 +1,385 @@
-import { Order, Invoice, OrderItemSnapshot, OrderStatus, ShippingAddress, UserRole, CartItem } from '../types';
+import { Order, Invoice, OrderItemSnapshot, ShippingAddress, UserRole, CartItem } from '../types';
 import { supabase, isSupabaseConfigured } from './supabase';
-import { logActivity } from './activityLogger';
 
-const ORDERS_STORAGE_KEY = 'charms_hub_orders';
-const INVOICES_STORAGE_KEY = 'charms_hub_invoices';
-
-export async function createOrder(params: {
-  userId: string;
-  userEmail: string;
-  customerName: string;
-  shippingDetails: ShippingAddress;
+export interface CreateOrderInput {
+  /** What the customer buys. Prices/totals are computed by the database RPC. */
+  items: Array<{ product_id: string; quantity: number; selected_variant?: string }>;
   paymentMethod: string;
-  cartItems: CartItem[];
-  subtotal: number;
-  discountAmount: number;
-  shippingAmount: number;
-  totalAmount: number;
-}): Promise<{ order: Order; invoice: Invoice }> {
-  const now = new Date().toISOString();
-  const randomSuffix = Math.floor(10000 + Math.random() * 90000);
-  const orderId = `ord_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-  const orderNumber = `CH-2026-${randomSuffix}`;
-  const invoiceId = `inv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-  const invoiceNumber = `INV-CH-2026-${randomSuffix}`;
+  shippingDetails: ShippingAddress;
+  /** Replay protection: the same key always returns the same order. */
+  idempotencyKey?: string;
+}
 
-  // 1. Create historical snapshots of items
-  const itemSnapshots: OrderItemSnapshot[] = params.cartItems.map((item, idx) => ({
-    id: `item_${Date.now()}_${idx}`,
-    order_id: orderId,
-    product_id: item.product.id,
-    product_name_snapshot: item.product.name,
-    product_image_snapshot: item.product.image_url,
-    unit_price: item.product.price,
-    quantity: item.quantity,
-    discount_amount: 0,
-    line_total: item.product.price * item.quantity,
-    selected_variant: item.selected_variant,
+export interface CreateOrderResult {
+  success: boolean;
+  order?: Order;
+  invoice?: Invoice;
+  error?: string;
+}
+
+/** Raw authoritative payload returned by the create_order RPC. */
+interface OrderRpcPayload {
+  order_id: string;
+  order_number: string;
+  invoice_id: string;
+  invoice_number: string;
+  status: string;
+  payment_status: string;
+  payment_method: string;
+  subtotal: number;
+  discount_amount: number;
+  shipping_amount: number;
+  total_amount: number;
+  currency: string;
+  items: Array<{
+    product_id: string;
+    product_name_snapshot: string;
+    product_image_snapshot: string;
+    unit_price: number;
+    quantity: number;
+    discount_amount: number;
+    line_total: number;
+    selected_variant: string | null;
+  }>;
+}
+
+// Cloud is the sole authoritative store for orders, invoices and logs.
+// (localStorage previously mirrored these; it no longer does.)
+
+function mapOrderItem(row: Record<string, unknown>): OrderItemSnapshot {
+  return {
+    id: (row.id as string) || `item_${row.order_id}_${row.product_id}`,
+    order_id: row.order_id as string,
+    product_id: row.product_id as string,
+    product_name_snapshot: row.product_name_snapshot as string,
+    product_image_snapshot: (row.product_image_snapshot as string) || '',
+    unit_price: Number(row.unit_price),
+    quantity: Number(row.quantity),
+    discount_amount: Number(row.discount_amount ?? 0),
+    line_total: Number(row.line_total ?? Number(row.unit_price) * Number(row.quantity)),
+    selected_variant: (row.selected_variant as string) || undefined,
+    created_at: (row.created_at as string) || new Date().toISOString(),
+  };
+}
+
+function mapOrder(row: Record<string, unknown>): Order {
+  return {
+    id: row.id as string,
+    order_number: row.order_number as string,
+    user_id: row.user_id as string,
+    customer_email: row.customer_email as string,
+    customer_name: row.customer_name as string,
+    status: row.status as Order['status'],
+    payment_status: row.payment_status as Order['payment_status'],
+    payment_method: row.payment_method as string,
+    subtotal: Number(row.subtotal),
+    discount_amount: Number(row.discount_amount ?? 0),
+    shipping_amount: Number(row.shipping_amount ?? 0),
+    total_amount: Number(row.total_amount),
+    currency: (row.currency as string) || 'INR',
+    shipping_details: row.shipping_details as ShippingAddress,
+    billing_details: (row.billing_details as ShippingAddress) || undefined,
+    items: [],
+    invoice_id: (row.invoice_id as string) || undefined,
+    invoice_number: (row.invoice_number as string) || undefined,
+    created_at: row.created_at as string,
+    updated_at: row.updated_at as string,
+  };
+}
+
+function mapInvoice(row: Record<string, unknown>): Invoice {
+  return {
+    id: row.id as string,
+    invoice_number: row.invoice_number as string,
+    order_id: row.order_id as string,
+    order_number: row.order_number as string,
+    user_id: row.user_id as string,
+    customer_name: row.customer_name as string,
+    customer_email: row.customer_email as string,
+    shipping_details: row.shipping_details as ShippingAddress,
+    items: [],
+    subtotal: Number(row.subtotal),
+    discount_amount: Number(row.discount_amount ?? 0),
+    shipping_amount: Number(row.shipping_amount ?? 0),
+    total_amount: Number(row.total_amount),
+    currency: (row.currency as string) || 'INR',
+    invoice_url: (row.invoice_url as string) || undefined,
+    status: row.status as Invoice['status'],
+    created_at: row.created_at as string,
+    updated_at: row.updated_at as string,
+  };
+}
+
+async function fetchOrderItems(orderIds: string[]): Promise<Map<string, OrderItemSnapshot[]>> {
+  const byOrder = new Map<string, OrderItemSnapshot[]>();
+  if (!supabase || orderIds.length === 0) return byOrder;
+  const { data, error } = await supabase
+    .from('order_items')
+    .select('*')
+    .in('order_id', orderIds);
+  if (error) {
+    console.error('Failed to load order_items:', error.message);
+    return byOrder;
+  }
+  for (const raw of data ?? []) {
+    const item = mapOrderItem(raw as Record<string, unknown>);
+    const list = byOrder.get(item.order_id) || [];
+    list.push(item);
+    byOrder.set(item.order_id, list);
+  }
+  return byOrder;
+}
+
+async function hydrateOrders(orders: Order[]): Promise<Order[]> {
+  if (orders.length === 0) return orders;
+  const byOrder = await fetchOrderItems(orders.map((o) => o.id));
+  return orders.map((o) => ({ ...o, items: byOrder.get(o.id) || o.items || [] }));
+}
+
+/**
+ * Creates an order through the secure database transaction.
+ * The database fetches current product prices, validates stock/availability,
+ * computes all monetary values and stores immutable snapshots atomically.
+ * Client-supplied amounts are ignored.
+ */
+export async function createOrder(input: CreateOrderInput): Promise<CreateOrderResult> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, error: 'Checkout is unavailable: cloud services are not configured.' };
+  }
+  if (!input.items || input.items.length === 0) {
+    return { success: false, error: 'Your bag is empty.' };
+  }
+
+  const { data, error } = await supabase.rpc('create_order', {
+    p_items: input.items,
+    p_payment_method: input.paymentMethod,
+    p_shipping_details: input.shippingDetails,
+    p_idempotency_key: input.idempotencyKey ?? null,
+  });
+
+  if (error || !data) {
+    const message = error?.message || 'Order creation failed';
+    console.error('create_order RPC failed:', message);
+    return { success: false, error: message };
+  }
+
+  const payload = data as OrderRpcPayload;
+  const now = new Date().toISOString();
+
+  const items: OrderItemSnapshot[] = payload.items.map((item, idx) => ({
+    id: `item_${payload.order_id}_${idx}`,
+    order_id: payload.order_id,
+    product_id: item.product_id,
+    product_name_snapshot: item.product_name_snapshot,
+    product_image_snapshot: item.product_image_snapshot,
+    unit_price: Number(item.unit_price),
+    quantity: Number(item.quantity),
+    discount_amount: Number(item.discount_amount ?? 0),
+    line_total: Number(item.line_total),
+    selected_variant: item.selected_variant || undefined,
     created_at: now,
   }));
 
-  const paymentStatus = params.paymentMethod.toLowerCase().includes('cash')
-    ? 'Cash on Delivery'
-    : 'Paid';
-
-  // 2. Create Order
   const order: Order = {
-    id: orderId,
-    order_number: orderNumber,
-    user_id: params.userId,
-    customer_email: params.userEmail,
-    customer_name: params.customerName,
-    status: 'Confirmed',
-    payment_status: paymentStatus,
-    payment_method: params.paymentMethod,
-    subtotal: params.subtotal,
-    discount_amount: params.discountAmount,
-    shipping_amount: params.shippingAmount,
-    total_amount: params.totalAmount,
-    currency: 'INR',
-    shipping_details: params.shippingDetails,
-    billing_details: params.shippingDetails,
-    items: itemSnapshots,
-    invoice_id: invoiceId,
-    invoice_number: invoiceNumber,
+    id: payload.order_id,
+    order_number: payload.order_number,
+    user_id: '',
+    customer_email: input.shippingDetails.email,
+    customer_name: input.shippingDetails.fullName,
+    status: payload.status as Order['status'],
+    payment_status: payload.payment_status as Order['payment_status'],
+    payment_method: payload.payment_method,
+    subtotal: Number(payload.subtotal),
+    discount_amount: Number(payload.discount_amount ?? 0),
+    shipping_amount: Number(payload.shipping_amount ?? 0),
+    total_amount: Number(payload.total_amount),
+    currency: payload.currency || 'INR',
+    shipping_details: input.shippingDetails,
+    billing_details: input.shippingDetails,
+    items,
+    invoice_id: payload.invoice_id,
+    invoice_number: payload.invoice_number,
     created_at: now,
     updated_at: now,
   };
 
-  // 3. Create Invoice
   const invoice: Invoice = {
-    id: invoiceId,
-    invoice_number: invoiceNumber,
-    order_id: orderId,
-    order_number: orderNumber,
-    user_id: params.userId,
-    customer_name: params.customerName,
-    customer_email: params.userEmail,
-    shipping_details: params.shippingDetails,
-    items: itemSnapshots,
-    subtotal: params.subtotal,
-    discount_amount: params.discountAmount,
-    shipping_amount: params.shippingAmount,
-    total_amount: params.totalAmount,
-    currency: 'INR',
+    id: payload.invoice_id,
+    invoice_number: payload.invoice_number,
+    order_id: payload.order_id,
+    order_number: payload.order_number,
+    user_id: '',
+    customer_name: input.shippingDetails.fullName,
+    customer_email: input.shippingDetails.email,
+    shipping_details: input.shippingDetails,
+    items,
+    subtotal: Number(payload.subtotal),
+    discount_amount: Number(payload.discount_amount ?? 0),
+    shipping_amount: Number(payload.shipping_amount ?? 0),
+    total_amount: Number(payload.total_amount),
+    currency: payload.currency || 'INR',
     status: 'Generated',
     created_at: now,
     updated_at: now,
   };
 
-  // 4. Save to Supabase if configured.
-  // The `items` array exists only in the client types (backed by the
-  // order_items table) — it must be stripped before inserting
-  // orders/invoices, which have no such column.
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const { items: _orderItems, ...orderRecord } = order;
-      const { items: _invoiceItems, ...invoiceRecord } = invoice;
-
-      const orderResult = await supabase.from('orders').insert([orderRecord]);
-      if (orderResult.error) {
-        console.error('Supabase order insert failed:', orderResult.error.message);
-      } else {
-        const itemsResult = await supabase.from('order_items').insert(itemSnapshots);
-        if (itemsResult.error) {
-          console.error('Supabase order_items insert failed:', itemsResult.error.message);
-        }
-
-        const invoiceResult = await supabase.from('invoices').insert([invoiceRecord]);
-        if (invoiceResult.error) {
-          console.error('Supabase invoice insert failed:', invoiceResult.error.message);
-        }
-      }
-    } catch (err) {
-      console.warn('Supabase order insert failed, saving to local store:', err);
-    }
-  }
-
-  // 5. Always save to local storage
-  try {
-    const existingOrders: Order[] = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || '[]');
-    localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify([order, ...existingOrders]));
-
-    const existingInvoices: Invoice[] = JSON.parse(localStorage.getItem(INVOICES_STORAGE_KEY) || '[]');
-    localStorage.setItem(INVOICES_STORAGE_KEY, JSON.stringify([invoice, ...existingInvoices]));
-  } catch (err) {
-    console.error('Failed to save order to local storage:', err);
-  }
-
-  // 6. Log audit events
-  await logActivity({
-    userId: params.userId,
-    userEmail: params.userEmail,
-    role: 'customer',
-    eventType: 'order_created',
-    entityType: 'order',
-    entityId: orderId,
-    metadata: {
-      order_number: orderNumber,
-      total_amount: params.totalAmount,
-      item_count: params.cartItems.length,
-    },
-  });
-
-  await logActivity({
-    userId: params.userId,
-    userEmail: params.userEmail,
-    role: 'customer',
-    eventType: 'invoice_generated',
-    entityType: 'invoice',
-    entityId: invoiceId,
-    metadata: {
-      invoice_number: invoiceNumber,
-      order_number: orderNumber,
-    },
-  });
-
-  return { order, invoice };
+  return { success: true, order, invoice };
 }
 
-// Cloud order rows carry no items column — hydrate the immutable
-// snapshots from order_items so callers (order history, invoices)
-// see the same shape as local records.
-async function hydrateOrderItems(orders: Order[]): Promise<Order[]> {
-  if (!supabase || orders.length === 0) return orders;
-  try {
-    const { data, error } = await supabase
-      .from('order_items')
-      .select('*')
-      .in('order_id', orders.map((o) => o.id));
-    if (error || !data) {
-      console.warn('Failed to load order_items from cloud:', error?.message);
-      return orders;
-    }
-    const byOrder = new Map<string, OrderItemSnapshot[]>();
-    for (const item of data as OrderItemSnapshot[]) {
-      const list = byOrder.get(item.order_id) || [];
-      list.push(item);
-      byOrder.set(item.order_id, list);
-    }
-    return orders.map((o) => ({ ...o, items: byOrder.get(o.id) || o.items || [] }));
-  } catch (err) {
-    console.warn('Failed to hydrate order items from cloud:', err);
-    return orders;
-  }
-}
-
-// Customer Isolation: Only retrieve orders belonging to userId
+/** Customer: own orders only (enforced by RLS). */
 export async function getOrdersByUser(userId: string): Promise<Order[]> {
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
-      if (!error && data && data.length > 0) {
-        return hydrateOrderItems(data as Order[]);
-      }
-    } catch (err) {
-      console.warn('Supabase query failed, falling back to local store:', err);
-    }
-  }
-
-  try {
-    const raw: Order[] = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || '[]');
-    return raw.filter((o) => o.user_id === userId);
-  } catch {
+  if (!isSupabaseConfigured || !supabase) return [];
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('Failed to load user orders:', error.message);
     return [];
   }
+  return hydrateOrders((data ?? []).map((row) => mapOrder(row as Record<string, unknown>)));
 }
 
-// Authorized: Shop Owner and Developer only
-export async function getAllOrders(roleOrUser: UserRole | { role: UserRole }): Promise<Order[]> {
+/** Shop Owner / Developer: all orders (RLS-enforced). */
+export async function getAllOrders(roleOrUser: UserRole | { role?: UserRole }): Promise<Order[]> {
   const role = typeof roleOrUser === 'string' ? roleOrUser : roleOrUser?.role;
-  if (role !== 'shop_owner' && role !== 'developer') {
+  if (role !== 'shop_owner' && role !== 'developer') return [];
+  if (!isSupabaseConfigured || !supabase) return [];
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('Failed to load all orders:', error.message);
     return [];
   }
-
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (!error && data && data.length > 0) {
-        return hydrateOrderItems(data as Order[]);
-      }
-    } catch (err) {
-      console.warn('Supabase query failed, falling back to local store:', err);
-    }
-  }
-
-  try {
-    return JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || '[]');
-  } catch {
-    return [];
-  }
+  return hydrateOrders((data ?? []).map((row) => mapOrder(row as Record<string, unknown>)));
 }
 
-// Get single order with permission check
+/** Single order with role-aware access (RLS enforces server-side). */
 export async function getOrderById(orderId: string, userId: string, role: UserRole): Promise<Order | null> {
-  let order: Order | null = null;
-
-  try {
-    const raw: Order[] = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || '[]');
-    order = raw.find((o) => o.id === orderId) || null;
-  } catch {
-    order = null;
+  if (!isSupabaseConfigured || !supabase) return null;
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('id', orderId)
+    .maybeSingle();
+  if (error) {
+    console.error('Failed to load order:', error.message);
+    return null;
   }
-
-  if (!order) return null;
-
-  // Permission check: customer can only view their own order
-  if (role === 'customer' && order.user_id !== userId) {
-    throw new Error('Access denied: You cannot view another customer’s order.');
-  }
-
+  if (!data) return null;
+  // Customer isolation is enforced by RLS; this is defense in depth.
+  if (role === 'customer' && data.user_id !== userId) return null;
+  const [order] = await hydrateOrders([mapOrder(data as Record<string, unknown>)]);
   return order;
 }
 
-// Update order status (Shop Owner / Developer only)
+/** Shop Owner / Developer only: update order status (RLS-enforced).
+ *  The order_status_changed audit entry is written by a database trigger. */
 export async function updateOrderStatus(
   orderId: string,
-  status: any,
-  roleOrUser: UserRole | { id: string; role: UserRole; email?: string },
-  userEmail?: string,
-  userId?: string
+  status: Order['status'],
+  roleOrUser: UserRole | { id: string; role: UserRole; email?: string }
 ): Promise<{ success: boolean; order?: Order; error?: string }> {
   const role = typeof roleOrUser === 'string' ? roleOrUser : roleOrUser?.role;
-  const effectiveEmail = typeof roleOrUser === 'object' ? roleOrUser.email || 'system' : userEmail || 'system';
-  const effectiveUserId = typeof roleOrUser === 'object' ? roleOrUser.id : userId || 'system';
-
   if (role !== 'shop_owner' && role !== 'developer') {
-    return { success: false, error: 'Unauthorized: Only Shop Owner and Developer can update order status.' };
+    return { success: false, error: 'Unauthorized: only Shop Owner and Developer can update order status.' };
+  }
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, error: 'Cloud services are not configured.' };
   }
 
-  let updatedOrder: Order | null = null;
-  try {
-    const raw: Order[] = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || '[]');
-    const idx = raw.findIndex((o) => o.id === orderId);
-    if (idx !== -1) {
-      raw[idx].status = status;
-      raw[idx].updated_at = new Date().toISOString();
-      localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(raw));
-      updatedOrder = raw[idx];
-    }
-  } catch (err) {
-    console.error('Failed to update order status:', err);
-    return { success: false, error: 'Failed to update order status' };
-  }
+  const { data, error } = await supabase
+    .from('orders')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', orderId)
+    .select('*')
+    .maybeSingle();
 
-  if (updatedOrder) {
-    await logActivity({
-      userId: effectiveUserId,
-      userEmail: effectiveEmail,
-      role,
-      eventType: 'order_status_updated',
-      entityType: 'order',
-      entityId: orderId,
-      metadata: {
-        new_status: status,
-        order_number: updatedOrder.order_number,
-      },
-    });
+  if (error) {
+    return { success: false, error: error.message };
   }
-
-  return { success: true, order: updatedOrder || undefined };
+  if (!data) {
+    return { success: false, error: 'Order not found or not authorized.' };
+  }
+  const [order] = await hydrateOrders([mapOrder(data as Record<string, unknown>)]);
+  return { success: true, order };
 }
 
-
-// Invoices for customer (Customer Isolation)
+/** Customer: own invoices, hydrated with immutable item snapshots. */
 export async function getInvoicesByUser(userId: string): Promise<Invoice[]> {
-  try {
-    const raw: Invoice[] = JSON.parse(localStorage.getItem(INVOICES_STORAGE_KEY) || '[]');
-    return raw.filter((inv) => inv.user_id === userId);
-  } catch {
+  if (!isSupabaseConfigured || !supabase) return [];
+  const { data, error } = await supabase
+    .from('invoices')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('Failed to load invoices:', error.message);
     return [];
   }
+  return (data ?? []).map((row) => mapInvoice(row as Record<string, unknown>));
 }
 
-// Authorized: Shop Owner and Developer only
 export async function getAllInvoices(role: UserRole): Promise<Invoice[]> {
   if (role !== 'shop_owner' && role !== 'developer') {
     throw new Error('Unauthorized: Only Shop Owner and Developer can access all invoices.');
   }
-  try {
-    return JSON.parse(localStorage.getItem(INVOICES_STORAGE_KEY) || '[]');
-  } catch {
+  if (!isSupabaseConfigured || !supabase) return [];
+  const { data, error } = await supabase
+    .from('invoices')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('Failed to load all invoices:', error.message);
     return [];
   }
+  return (data ?? []).map((row) => mapInvoice(row as Record<string, unknown>));
 }
 
-// Single invoice with permission check
-export async function getInvoiceById(invoiceId: string, userId: string, role: UserRole): Promise<Invoice | null> {
-  let invoice: Invoice | null = null;
-  try {
-    const raw: Invoice[] = JSON.parse(localStorage.getItem(INVOICES_STORAGE_KEY) || '[]');
-    invoice = raw.find((i) => i.id === invoiceId) || null;
-  } catch {
-    invoice = null;
+/** Invoice for an order, with item snapshots from order_items (never
+ *  regenerated from current product data). RLS enforces ownership. */
+export async function getInvoiceByOrderId(orderId: string, user?: { id: string; role: UserRole }): Promise<Invoice | null> {
+  if (!isSupabaseConfigured || !supabase) return null;
+
+  const { data: invoiceRow, error: invoiceError } = await supabase
+    .from('invoices')
+    .select('*')
+    .eq('order_id', orderId)
+    .maybeSingle();
+  if (invoiceError) {
+    console.error('Failed to load invoice:', invoiceError.message);
+    return null;
   }
+  if (!invoiceRow) return null;
 
-  if (!invoice) return null;
+  // Defense in depth: customer may only read own invoices (also RLS-enforced).
+  if (user && user.role === 'customer' && invoiceRow.user_id !== user.id) return null;
 
-  if (role === 'customer' && invoice.user_id !== userId) {
-    throw new Error('Access denied: You cannot view another customer’s invoice.');
-  }
-
+  const itemsByOrder = await fetchOrderItems([orderId]);
+  const invoice = mapInvoice(invoiceRow as Record<string, unknown>);
+  invoice.items = itemsByOrder.get(orderId) || [];
   return invoice;
 }
 
-// Convenient alias for fetching user orders
-export async function getUserOrders(userId: string, _user?: any): Promise<Order[]> {
-  return getOrdersByUser(userId);
-}
-
-// Find invoice by order ID
-export async function getInvoiceByOrderId(orderId: string, user?: any): Promise<Invoice | null> {
-  try {
-    const raw: Invoice[] = JSON.parse(localStorage.getItem(INVOICES_STORAGE_KEY) || '[]');
-    const inv = raw.find((i) => i.order_id === orderId || i.id === orderId);
-    if (!inv) return null;
-
-    if (user && user.role === 'customer' && inv.user_id !== user.id) {
-      return null;
-    }
-    return inv;
-  } catch {
+export async function getInvoiceById(invoiceId: string, userId: string, role: UserRole): Promise<Invoice | null> {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const { data, error } = await supabase
+    .from('invoices')
+    .select('*')
+    .eq('id', invoiceId)
+    .maybeSingle();
+  if (error) {
+    console.error('Failed to load invoice:', error.message);
     return null;
   }
+  if (!data) return null;
+  if (role === 'customer' && data.user_id !== userId) return null;
+
+  const itemsByOrder = await fetchOrderItems([data.order_id as string]);
+  const invoice = mapInvoice(data as Record<string, unknown>);
+  invoice.items = itemsByOrder.get(data.order_id as string) || [];
+  return invoice;
 }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { storeCatalog } from '../../services/storeCatalog';
-import { getActivityLogs, clearActivityLogs } from '../../services/activityLogger';
+import { getActivityLogs } from '../../services/activityLogger';
 import { isSupabaseConfigured } from '../../services/supabase';
 import { ActivityLog } from '../../types';
 import {
@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   AlertTriangle,
   RefreshCw,
-  Trash2,
   Download,
   Lock,
   ExternalLink,
@@ -50,13 +49,6 @@ export const DeveloperDashboard: React.FC = () => {
     };
     load();
   }, [user, isAuthenticated, navigate]);
-
-  const handleClearLogs = async () => {
-    if (window.confirm('Clear all audit logs from store records?')) {
-      await clearActivityLogs();
-      setLogs([]);
-    }
-  };
 
   const handleExportLogs = () => {
     const jsonStr = JSON.stringify(logs, null, 2);
@@ -99,13 +91,6 @@ export const DeveloperDashboard: React.FC = () => {
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export JSON</span>
-          </button>
-          <button
-            onClick={handleClearLogs}
-            className="px-4 py-2 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Clear Logs</span>
           </button>
         </div>
       </div>

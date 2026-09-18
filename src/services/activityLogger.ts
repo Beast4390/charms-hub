@@ -1,8 +1,11 @@
 import { ActivityLog, UserRole } from '../types';
 import { supabase, isSupabaseConfigured } from './supabase';
 
-const STORAGE_KEY = 'charms_hub_activity_logs';
-
+/**
+ * Audit logging. Identity (user_id / user_email / role) is authoritative:
+ * a database trigger derives it from the authenticated session on every
+ * insert, so client-supplied identity fields cannot forge audit entries.
+ */
 export async function logActivity(params: {
   userId: string;
   userEmail: string;
@@ -11,8 +14,10 @@ export async function logActivity(params: {
   entityType: string;
   entityId: string;
   metadata?: Record<string, unknown>;
-}): Promise<ActivityLog> {
-  const newLog: ActivityLog = {
+}): Promise<ActivityLog | null> {
+  if (!isSupabaseConfigured || !supabase) return null;
+
+  const candidate: ActivityLog = {
     id: 'log_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
     user_id: params.userId,
     user_email: params.userEmail,
@@ -24,26 +29,14 @@ export async function logActivity(params: {
     created_at: new Date().toISOString(),
   };
 
-  // 1. Try Supabase if configured
-  if (isSupabaseConfigured && supabase) {
-    try {
-      await supabase.from('activity_logs').insert([newLog]);
-    } catch (err) {
-      console.warn('Failed to insert log to Supabase, saving to local audit store:', err);
-    }
+  // Best-effort: audit failures must never break the user flow. The insert
+  // is checked and logged; identity fields are corrected server-side.
+  const { data, error } = await supabase.from('activity_logs').insert([candidate]).select('*').maybeSingle();
+  if (error || !data) {
+    console.warn('Activity log insert failed:', error?.message);
+    return null;
   }
-
-  // 2. Always persist to resilient local audit store
-  try {
-    const existing: ActivityLog[] = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    // Keep last 500 logs
-    const updated = [newLog, ...existing].slice(0, 500);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  } catch (err) {
-    console.error('Failed to persist activity log locally:', err);
-  }
-
-  return newLog;
+  return data as unknown as ActivityLog;
 }
 
 export async function getActivityLogs(filter?: {
@@ -52,44 +45,28 @@ export async function getActivityLogs(filter?: {
   userId?: string;
   entityType?: string;
 }): Promise<ActivityLog[]> {
-  // 1. Try Supabase if configured
-  if (isSupabaseConfigured && supabase) {
-    try {
-      let query = supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(100);
-      if (filter?.role) query = query.eq('role', filter.role);
-      if (filter?.eventType) query = query.eq('event_type', filter.eventType);
-      if (filter?.userId) query = query.eq('user_id', filter.userId);
-      if (filter?.entityType) query = query.eq('entity_type', filter.entityType);
+  if (!isSupabaseConfigured || !supabase) return [];
 
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) {
-        return data as ActivityLog[];
-      }
-    } catch (err) {
-      console.warn('Supabase logs query failed, reading local store:', err);
-    }
-  }
+  let query = supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(100);
+  if (filter?.role) query = query.eq('role', filter.role);
+  if (filter?.eventType) query = query.eq('event_type', filter.eventType);
+  if (filter?.userId) query = query.eq('user_id', filter.userId);
+  if (filter?.entityType) query = query.eq('entity_type', filter.entityType);
 
-  // 2. Read local audit store
-  try {
-    const raw: ActivityLog[] = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    return raw.filter((log) => {
-      if (filter?.role && log.role !== filter.role) return false;
-      if (filter?.eventType && log.event_type !== filter.eventType) return false;
-      if (filter?.userId && log.user_id !== filter.userId) return false;
-      if (filter?.entityType && log.entity_type !== filter.entityType) return false;
-      return true;
-    });
-  } catch {
+  const { data, error } = await query;
+  if (error) {
+    console.error('Activity log query failed:', error.message);
     return [];
   }
+  return (data ?? []) as unknown as ActivityLog[];
 }
 
+/** Legacy no-op: audit logs are immutable for clients; kept for API
+ *  compatibility with older callers. */
 export async function clearActivityLogs(): Promise<void> {
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem('charms_hub_activity_logs');
   } catch (err) {
-    console.error('Failed to clear logs:', err);
+    console.error('Failed to clear legacy local logs:', err);
   }
 }
-

@@ -48,6 +48,31 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onNavigate })
         </div>
       )}
 
+      {/* Verified knowledge sources used to ground the answer */}
+      {message.knowledgeSources && message.knowledgeSources.length > 0 && (
+        <div className="w-full mt-2 pl-9 pr-2 space-y-1.5">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-[#789A99] dark:text-[#E3D1AC]">
+            Based on verified Charms Hub information:
+          </div>
+          {message.knowledgeSources.map((src, idx) => (
+            <details key={idx} className="rounded-xl bg-white dark:bg-[#5B0E14] border border-[#F3DDD5] dark:border-[#7A1921] p-2.5">
+              <summary className="text-[11px] font-bold text-[#2B1810] dark:text-[#FCF7DC] cursor-pointer">
+                {src.title}
+                <span className="ml-1.5 text-[9px] font-bold uppercase text-[#789A99] dark:text-[#F1E194]">{src.category}</span>
+              </summary>
+              <p className="text-[11px] text-gray-600 dark:text-stone-300 mt-1.5 whitespace-pre-line">{src.content}</p>
+            </details>
+          ))}
+        </div>
+      )}
+
+      {/* Grounding indicator */}
+      {message.grounding && !message.isFallback && (
+        <span className="text-[9px] text-[#789A99] dark:text-[#F1E194] mt-1 pl-9 font-bold uppercase tracking-wider">
+          {message.grounding === 'gemini' ? '✦ Gemini-grounded answer' : '✦ Verified database answer'}
+        </span>
+      )}
+
       {/* Optional verified action link */}
       {message.actionType === 'contact_whatsapp' && (
         <div className="mt-2 pl-9">

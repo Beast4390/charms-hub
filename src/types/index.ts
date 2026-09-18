@@ -56,7 +56,9 @@ export interface ShippingAddress {
   fullName: string;
   phone: string;
   email: string;
+  house_building?: string;
   street: string;
+  area?: string;
   city: string;
   state: string;
   pincode: string;
@@ -89,7 +91,7 @@ export interface OrderItemSnapshot {
 }
 
 export type OrderStatus = 'Pending' | 'Confirmed' | 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled';
-export type PaymentStatus = 'Paid' | 'Pending Verification' | 'Cash on Delivery';
+export type PaymentStatus = 'Paid' | 'Pending Verification' | 'Cash on Delivery' | 'Refund Required';
 
 export interface Order {
   id: string;
@@ -100,6 +102,7 @@ export interface Order {
   status: OrderStatus;
   payment_status: PaymentStatus;
   payment_method: string;
+  payment_reference?: string | null;
   subtotal: number;
   discount_amount: number;
   shipping_amount: number;
@@ -110,6 +113,8 @@ export interface Order {
   items: OrderItemSnapshot[];
   invoice_id?: string;
   invoice_number?: string;
+  cancellation_reason?: string | null;
+  cancelled_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -129,6 +134,8 @@ export interface Invoice {
   shipping_amount: number;
   total_amount: number;
   currency: string;
+  payment_method?: string;
+  payment_status?: string;
   invoice_url?: string;
   status: 'Generated' | 'Paid';
   created_at: string;
@@ -174,9 +181,21 @@ export interface KnowledgeItem {
   id: string;
   title: string;
   content: string;
-  category: 'delivery' | 'order' | 'payment' | 'return_refund' | 'product_care' | 'general';
+  category: string;
   source: string;
   metadata?: Record<string, unknown>;
+  embedding_status?: 'pending' | 'indexed' | 'failed';
+  indexed_at?: string | null;
+  is_active?: boolean;
+  updated_at?: string;
+}
+
+export interface OrderEvent {
+  id: string;
+  order_id: string;
+  event: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
 }
 
 export interface ChatMessage {
@@ -185,7 +204,9 @@ export interface ChatMessage {
   text: string;
   timestamp: string;
   recommendedProducts?: Product[];
+  knowledgeSources?: Array<{ title: string; content: string; category: string; source: string }>;
   actionType?: 'view_products' | 'contact_whatsapp' | 'view_policy';
   actionPayload?: string;
   isFallback?: boolean;
+  grounding?: 'gemini' | 'retrieval_only';
 }

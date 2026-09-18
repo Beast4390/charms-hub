@@ -3,14 +3,15 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import { storeCatalog } from '../../services/storeCatalog';
-import { Sparkles, Mail, Lock, ArrowRight, UserCheck, Shield, ShoppingBag } from 'lucide-react';
-import { UserRole } from '../../types';
+import { supabase, isSupabaseConfigured } from '../../services/supabase';
+import { Sparkles, Mail, Lock, ArrowRight, ShoppingBag, KeyRound } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const { signIn, pendingAction, clearPendingAction } = useAuth();
   const { addToCart } = useCart();
@@ -41,6 +42,7 @@ export const LoginPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setNotice('');
     setLoading(true);
 
     const res = await signIn(email, password);
@@ -52,22 +54,26 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleQuickDemoLogin = async (role: UserRole) => {
+  const handleForgotPassword = async () => {
     setError('');
+    setNotice('');
+    if (!email.trim()) {
+      setError('Enter your email address above first, then tap "Forgot password?".');
+      return;
+    }
+    if (!isSupabaseConfigured || !supabase) {
+      setError('Password reset is unavailable: cloud services are not configured.');
+      return;
+    }
     setLoading(true);
-    const demoEmail =
-      role === 'shop_owner'
-        ? 'owner@charmshub.ai'
-        : role === 'developer'
-        ? 'developer@charmshub.ai'
-        : 'shopper@charmshub.ai';
-
-    const res = await signIn(demoEmail, 'demo1234', role);
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: window.location.origin + '/auth/login',
+    });
     setLoading(false);
-    if (res.success) {
-      handlePostAuthRedirect();
+    if (resetError) {
+      setError(resetError.message);
     } else {
-      setError(res.error || 'Failed to sign in as demo role');
+      setNotice('Password reset link sent! Check your inbox and follow the email instructions.');
     }
   };
 
@@ -103,6 +109,12 @@ export const LoginPage: React.FC = () => {
         {error && (
           <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-300 text-xs">
             {error}
+          </div>
+        )}
+
+        {notice && (
+          <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-300 text-xs">
+            {notice}
           </div>
         )}
 
@@ -150,40 +162,17 @@ export const LoginPage: React.FC = () => {
             <span>{loading ? 'Signing in...' : 'Sign In'}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
-        </form>
 
-        {/* Fast 1-Click Role Testing / Hackathon Review */}
-        <div className="pt-2 border-t border-[#F3DDD5] dark:border-[#7A1921]/60 space-y-2.5">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-center text-gray-500 dark:text-stone-400">
-            Quick 1-Click Role Access
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => handleQuickDemoLogin('customer')}
-              className="py-2 px-1 rounded-xl bg-[#FFF8F5] dark:bg-[#3F070B] border border-[#F3DDD5] dark:border-[#7A1921] text-[11px] font-bold text-[#2B1810] dark:text-[#FCF7DC] hover:border-[#789A99] transition flex flex-col items-center gap-1 cursor-pointer"
-            >
-              <UserCheck className="w-3.5 h-3.5 text-[#789A99]" />
-              <span>Customer</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickDemoLogin('shop_owner')}
-              className="py-2 px-1 rounded-xl bg-[#FFF8F5] dark:bg-[#3F070B] border border-[#F3DDD5] dark:border-[#7A1921] text-[11px] font-bold text-[#2B1810] dark:text-[#FCF7DC] hover:border-[#789A99] transition flex flex-col items-center gap-1 cursor-pointer"
-            >
-              <ShoppingBag className="w-3.5 h-3.5 text-[#E91E63]" />
-              <span>Shop Owner</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickDemoLogin('developer')}
-              className="py-2 px-1 rounded-xl bg-[#FFF8F5] dark:bg-[#3F070B] border border-[#F3DDD5] dark:border-[#7A1921] text-[11px] font-bold text-[#2B1810] dark:text-[#FCF7DC] hover:border-[#789A99] transition flex flex-col items-center gap-1 cursor-pointer"
-            >
-              <Shield className="w-3.5 h-3.5 text-[#F1E194]" />
-              <span>Developer</span>
-            </button>
-          </div>
-        </div>
+          <button
+            type="button"
+            onClick={handleForgotPassword}
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-1.5 text-[11px] font-bold text-[#789A99] dark:text-[#F1E194] hover:underline cursor-pointer"
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            <span>Forgot password?</span>
+          </button>
+        </form>
 
         <div className="text-center pt-2 text-xs text-gray-500 dark:text-stone-400">
           Don&apos;t have an account?{' '}

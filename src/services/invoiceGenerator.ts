@@ -47,6 +47,11 @@ export async function generateAndDownloadInvoicePDF(
   doc.text(`Order No: ${invoice.order_number}`, margin, y + 6);
   doc.text(`Date: ${new Date(invoice.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`, margin, y + 12);
   doc.text(`Status: ${invoice.status.toUpperCase()}`, margin, y + 18);
+  if (invoice.payment_method || invoice.payment_status) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(`Payment: ${invoice.payment_method ?? '-'} | ${invoice.payment_status ?? '-'}`, margin, y + 24);
+  }
 
   // Sold By
   const rightColX = pageWidth / 2 + 10;

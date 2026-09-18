@@ -51,8 +51,10 @@ export const ChatbotModal: React.FC = () => {
         sender: 'assistant',
         text: response.text,
         recommendedProducts: response.recommendedProducts,
+        knowledgeSources: response.knowledgeSources,
         actionType: response.actionType,
         isFallback: response.isFallback,
+        grounding: response.grounding,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, botMsg]);
@@ -88,10 +90,10 @@ export const ChatbotModal: React.FC = () => {
   const suggestedQuestions = [
     'Show me bracelets under ₹300',
     'What earrings are available?',
-    'Show me hair accessories',
+    'How do I pay with UPI?',
     'How can I place an order?',
     'What are your delivery details?',
-    'Do you deliver to Japan?',
+    'Can I cancel my order?',
   ];
 
   return (

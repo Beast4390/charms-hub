@@ -7,7 +7,9 @@ import { downloadInvoicePDF } from '../../services/invoiceGenerator';
 import { getStoreAppearance, updateStoreAppearance, resetStoreAppearance } from '../../services/appearanceService';
 import { getActivityLogs } from '../../services/activityLogger';
 import { ProductCard } from '../../components/ProductCard/ProductCard';
+import { OwnerKnowledge } from '../../components/OwnerKnowledge/OwnerKnowledge';
 import { VERIFIED_CATEGORIES } from '../../data/categories';
+import { supabase } from '../../services/supabase';
 import { Product, Order, Invoice, StoreAppearanceSettings, ActivityLog } from '../../types';
 import {
   LayoutDashboard,
@@ -29,13 +31,15 @@ import {
   RotateCcw,
   Sparkles,
   ExternalLink,
+  BookOpen,
+  Upload,
 } from 'lucide-react';
 
 export const ShopOwnerDashboard: React.FC = () => {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<'catalog' | 'orders' | 'appearance' | 'logs'>('catalog');
+  const [activeTab, setActiveTab] = useState<'catalog' | 'orders' | 'knowledge' | 'appearance' | 'logs'>('catalog');
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
@@ -48,6 +52,7 @@ export const ShopOwnerDashboard: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [ragSyncing, setRagSyncing] = useState(false);
   const [savingProduct, setSavingProduct] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   // Form state for Add / Edit
   const [productForm, setProductForm] = useState<Partial<Product>>({
@@ -60,7 +65,6 @@ export const ShopOwnerDashboard: React.FC = () => {
     image_url: '/products/earrings/green-kashmiri-jhumka.jpg',
     description: 'Handcrafted authentic Kashmiri jewelry with high grade finish.',
     in_stock: true,
-    reference_verified: true,
     tags: ['kashmiri', 'handmade', 'earrings'],
   });
 
@@ -100,6 +104,39 @@ export const ShopOwnerDashboard: React.FC = () => {
   useEffect(() => {
     loadAllData();
   }, [user]);
+
+  /** Owner image upload to Supabase Storage. Uploaded images are never
+   *  auto-marked as reference-verified — verification stays deterministic. */
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !supabase) return;
+    if (!file.type.startsWith('image/')) {
+      showStatus('Please choose an image file', 'error');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showStatus('Image must be 5 MB or smaller', 'error');
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const path = `owner-uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error } = await supabase.storage
+        .from('product-images')
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (error) {
+        showStatus(error.message, 'error');
+        return;
+      }
+      const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+      setProductForm((f) => ({ ...f, image_url: data.publicUrl, reference_verified: false }));
+      showStatus('Image uploaded. Uploaded images are not auto-marked as verified.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const showStatus = (text: string, type: 'success' | 'error' = 'success') => {
     setStatusMessage({ text, type });
@@ -357,6 +394,18 @@ export const ShopOwnerDashboard: React.FC = () => {
         </button>
 
         <button
+          onClick={() => setActiveTab('knowledge')}
+          className={`pb-3 px-3 text-xs sm:text-sm font-bold flex items-center gap-2 border-b-2 transition cursor-pointer whitespace-nowrap ${
+            activeTab === 'knowledge'
+              ? 'border-[#789A99] text-[#789A99] dark:text-[#F1E194] dark:border-[#F1E194]'
+              : 'border-transparent text-gray-500 hover:text-[#2B1810] dark:text-stone-400'
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          <span>Knowledge Base</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('appearance')}
           className={`pb-3 px-3 text-xs sm:text-sm font-bold flex items-center gap-2 border-b-2 transition cursor-pointer whitespace-nowrap ${
             activeTab === 'appearance'
@@ -607,6 +656,10 @@ export const ShopOwnerDashboard: React.FC = () => {
       )}
 
       {/* TAB 3: STORE APPEARANCE CUSTOMIZER */}
+      {activeTab === 'knowledge' && (
+        <OwnerKnowledge onNotify={showStatus} />
+      )}
+
       {activeTab === 'appearance' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
           {/* Controls column */}
@@ -955,7 +1008,7 @@ export const ShopOwnerDashboard: React.FC = () => {
 
               <div>
                 <label className="block font-bold text-gray-700 dark:text-stone-300 mb-1">
-                  Verified Image URL *
+                  Product Image URL *
                 </label>
                 <input
                   type="text"
@@ -965,6 +1018,22 @@ export const ShopOwnerDashboard: React.FC = () => {
                   placeholder="/products/earrings/... or https://..."
                   className="w-full p-2.5 rounded-xl border border-[#F3DDD5] dark:border-[#7A1921] bg-[#FFF8F5] dark:bg-[#3F070B] text-[#2B1810] dark:text-[#FCF7DC]"
                 />
+                <div className="flex items-center gap-2 mt-2">
+                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#FFF8F5] dark:bg-[#3F070B] border border-[#F3DDD5] dark:border-[#7A1921] text-[11px] font-bold text-[#2B1810] dark:text-[#FCF7DC] cursor-pointer hover:bg-[#FFD2C2]/40 transition">
+                    <Upload className="w-3.5 h-3.5 text-[#789A99] dark:text-[#F1E194]" />
+                    <span>{uploadingImage ? 'Uploading…' : 'Upload image'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleImageUpload}
+                      disabled={uploadingImage}
+                    />
+                  </label>
+                  <span className="text-[10px] text-gray-400">
+                    Uploaded images are stored in Supabase Storage and never auto-marked as verified.
+                  </span>
+                </div>
                 <span className="text-[10px] text-gray-400 mt-1 block">
                   PRIMARY RULE: The image MUST correspond authentically to the named product.
                 </span>

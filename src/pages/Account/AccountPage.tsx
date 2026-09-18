@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { getOrdersByUser, getInvoiceByOrderId } from '../../services/orderService';
+import { getOrdersByUser, getInvoiceByOrderId, cancelOrder } from '../../services/orderService';
 import { downloadInvoicePDF } from '../../services/invoiceGenerator';
+import { logActivity } from '../../services/activityLogger';
+import { OrderTimeline } from '../../components/OrderTimeline/OrderTimeline';
 import { Order, Invoice } from '../../types';
 import {
   User,
@@ -32,6 +34,9 @@ export const AccountPage: React.FC = () => {
   const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState(user?.full_name || '');
   const [phone, setPhone] = useState(user?.phone || '');
+  const [cancelTarget, setCancelTarget] = useState<Order | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated || !user) {
@@ -79,9 +84,62 @@ export const AccountPage: React.FC = () => {
     const inv = invoicesMap[orderId];
     if (inv) {
       downloadInvoicePDF(inv);
+      void logActivity({
+        userId: user!.id,
+        userEmail: user!.email,
+        role: user!.role,
+        eventType: 'invoice_downloaded',
+        entityType: 'invoice',
+        entityId: inv.id,
+        metadata: { invoice_number: inv.invoice_number, order_number: inv.order_number },
+      });
     } else {
       alert('Invoice is being generated for this order.');
     }
+  };
+
+  const handleShareInvoice = async (orderId: string) => {
+    const inv = invoicesMap[orderId];
+    if (!inv) {
+      alert('Invoice is being generated for this order.');
+      return;
+    }
+    const shareText = `Charms Hub Invoice ${inv.invoice_number} (Order ${inv.order_number}) — Total Rs.${inv.total_amount}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: `Charms Hub Invoice ${inv.invoice_number}`, text: shareText });
+      } else {
+        await navigator.clipboard.writeText(shareText);
+        alert('Invoice summary copied to clipboard.');
+      }
+      void logActivity({
+        userId: user!.id,
+        userEmail: user!.email,
+        role: user!.role,
+        eventType: 'invoice_shared',
+        entityType: 'invoice',
+        entityId: inv.id,
+        metadata: { invoice_number: inv.invoice_number, order_number: inv.order_number },
+      });
+    } catch {
+      /* share cancelled */
+    }
+  };
+
+  const submitCancellation = async () => {
+    if (!cancelTarget || !user) return;
+    setCancelling(true);
+    const res = await cancelOrder(cancelTarget.id, cancelReason);
+    setCancelling(false);
+    if (!res.success) {
+      alert(res.error || 'Cancellation failed.');
+      return;
+    }
+    setCancelTarget(null);
+    setCancelReason('');
+    // Reload orders so the cancelled state + timeline come from the cloud
+    const refreshed = await getOrdersByUser(user.id);
+    setOrders(refreshed);
   };
 
   return (
@@ -267,13 +325,15 @@ export const AccountPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span
                         className={`px-3 py-1 rounded-full text-[11px] font-bold ${
                           order.status === 'Delivered'
                             ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
                             : order.status === 'Shipped'
                             ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                            : order.status === 'Cancelled'
+                            ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
                             : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
                         }`}
                       >
@@ -289,7 +349,69 @@ export const AccountPage: React.FC = () => {
                         <Download className="w-3.5 h-3.5 text-[#789A99] dark:text-[#F1E194]" />
                         <span>PDF Invoice</span>
                       </button>
+
+                      {/* Share Invoice Button */}
+                      {invoicesMap[order.id] && (
+                        <button
+                          onClick={() => handleShareInvoice(order.id)}
+                          className="px-3 py-1.5 rounded-full bg-white dark:bg-[#7A1921] text-[#2B1810] dark:text-[#FCF7DC] text-xs font-bold transition cursor-pointer border border-[#F3DDD5] dark:border-[#8F1F28] hover:bg-[#FFF8F5]"
+                          title="Share Invoice"
+                        >
+                          <span>Share</span>
+                        </button>
+                      )}
+
+                      {/* Cancel Order (only before shipment) */}
+                      {['Pending', 'Confirmed', 'Processing'].includes(order.status) && (
+                        <button
+                          onClick={() => { setCancelTarget(order); setCancelReason(''); }}
+                          className="px-3 py-1.5 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 text-xs font-bold border border-rose-200 dark:border-rose-900 hover:bg-rose-100 transition cursor-pointer"
+                        >
+                          Cancel Order
+                        </button>
+                      )}
                     </div>
+                  </div>
+
+                  {/* Cancellation Dialog */}
+                  {cancelTarget?.id === order.id && (
+                    <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 space-y-2.5">
+                      <p className="text-xs font-bold text-rose-700 dark:text-rose-300">
+                        Cancel order #{order.order_number}?
+                      </p>
+                      <p className="text-[11px] text-rose-600/90 dark:text-rose-300/90">
+                        {order.payment_status === 'Pending Verification' || order.payment_status === 'Paid'
+                          ? 'This prepaid order will be marked Refund Required and reviewed manually by our team.'
+                          : 'This Cash on Delivery order requires no refund.'}
+                      </p>
+                      <textarea
+                        rows={2}
+                        value={cancelReason}
+                        onChange={(e) => setCancelReason(e.target.value)}
+                        placeholder="Cancellation reason (required)"
+                        className="w-full p-2.5 rounded-xl border border-rose-200 dark:border-rose-900 bg-white dark:bg-[#3F070B] text-xs text-[#2B1810] dark:text-[#FCF7DC]"
+                      />
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => setCancelTarget(null)}
+                          className="px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900 text-xs font-bold text-rose-700 dark:text-rose-300 cursor-pointer"
+                        >
+                          Keep Order
+                        </button>
+                        <button
+                          onClick={submitCancellation}
+                          disabled={cancelling || cancelReason.trim().length < 3}
+                          className="px-4 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {cancelling ? 'Cancelling…' : 'Confirm Cancellation'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Status Timeline */}
+                  <div className="pt-1">
+                    <OrderTimeline order={order} />
                   </div>
 
                   {/* Item List */}

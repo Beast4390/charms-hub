@@ -1,4 +1,4 @@
-import { Order, Invoice, OrderItemSnapshot, ShippingAddress, UserRole, CartItem } from '../types';
+import { Order, Invoice, OrderItemSnapshot, ShippingAddress, UserRole, CartItem, OrderEvent } from '../types';
 import { supabase, isSupabaseConfigured } from './supabase';
 
 export interface CreateOrderInput {
@@ -8,6 +8,8 @@ export interface CreateOrderInput {
   shippingDetails: ShippingAddress;
   /** Replay protection: the same key always returns the same order. */
   idempotencyKey?: string;
+  /** UPI transaction/reference id when the customer already paid. */
+  paymentReference?: string;
 }
 
 export interface CreateOrderResult {
@@ -155,6 +157,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     p_payment_method: input.paymentMethod,
     p_shipping_details: input.shippingDetails,
     p_idempotency_key: input.idempotencyKey ?? null,
+    p_payment_reference: input.paymentReference ?? null,
   });
 
   if (error || !data) {
@@ -218,6 +221,8 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     shipping_amount: Number(payload.shipping_amount ?? 0),
     total_amount: Number(payload.total_amount),
     currency: payload.currency || 'INR',
+    payment_method: payload.payment_method,
+    payment_status: payload.payment_status,
     status: 'Generated',
     created_at: now,
     updated_at: now,
@@ -339,6 +344,41 @@ export async function getAllInvoices(role: UserRole): Promise<Invoice[]> {
   return (data ?? []).map((row) => mapInvoice(row as Record<string, unknown>));
 }
 
+/** Customer-side cancellation via the secure cancel_order RPC.
+ *  Ownership, allowed states, refund handling and audit are enforced
+ *  server-side. Stock is boolean (no reservation), so nothing to restore. */
+export async function cancelOrder(orderId: string, reason: string): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, error: 'Cloud services are not configured.' };
+  }
+  if (!reason || reason.trim().length < 3) {
+    return { success: false, error: 'A cancellation reason is required.' };
+  }
+  const { data, error } = await supabase.rpc('cancel_order', {
+    p_order_id: orderId,
+    p_reason: reason.trim(),
+  });
+  if (error) {
+    return { success: false, error: error.message };
+  }
+  return { success: Boolean((data as { order_id?: string })?.order_id) };
+}
+
+/** Customer-visible status timeline for one of their orders (RLS-enforced). */
+export async function getOrderEvents(orderId: string): Promise<OrderEvent[]> {
+  if (!isSupabaseConfigured || !supabase) return [];
+  const { data, error } = await supabase
+    .from('order_events')
+    .select('*')
+    .eq('order_id', orderId)
+    .order('created_at', { ascending: true });
+  if (error) {
+    console.error('Failed to load order events:', error.message);
+    return [];
+  }
+  return (data ?? []) as unknown as OrderEvent[];
+}
+
 /** Invoice for an order, with item snapshots from order_items (never
  *  regenerated from current product data). RLS enforces ownership. */
 export async function getInvoiceByOrderId(orderId: string, user?: { id: string; role: UserRole }): Promise<Invoice | null> {
@@ -361,6 +401,17 @@ export async function getInvoiceByOrderId(orderId: string, user?: { id: string; 
   const itemsByOrder = await fetchOrderItems([orderId]);
   const invoice = mapInvoice(invoiceRow as Record<string, unknown>);
   invoice.items = itemsByOrder.get(orderId) || [];
+
+  // Payment facts live on the order; attach them for invoice rendering.
+  const { data: orderRow } = await supabase
+    .from('orders')
+    .select('payment_method, payment_status')
+    .eq('id', orderId)
+    .maybeSingle();
+  if (orderRow) {
+    invoice.payment_method = (orderRow.payment_method as string) || undefined;
+    invoice.payment_status = (orderRow.payment_status as string) || undefined;
+  }
   return invoice;
 }
 

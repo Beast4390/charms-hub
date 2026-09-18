@@ -1,9 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
 import { createOrder } from '../../services/orderService';
 import { downloadInvoicePDF } from '../../services/invoiceGenerator';
+import { getStoreConfig, STORE_CONFIG_KEYS } from '../../services/storeConfig';
 import { Order, Invoice } from '../../types';
 import {
   ShoppingBag,
@@ -40,16 +41,26 @@ export const CartPage: React.FC = () => {
 
   const [customerName, setCustomerName] = useState(user?.full_name || '');
   const [phone, setPhone] = useState(user?.phone || '');
-  const [address, setAddress] = useState('');
+  const [houseBuilding, setHouseBuilding] = useState('');
+  const [street, setStreet] = useState('');
+  const [area, setArea] = useState('');
   const [city, setCity] = useState('');
   const [stateName, setStateName] = useState('Maharashtra');
   const [pincode, setPincode] = useState('');
   const [instagramHandle, setInstagramHandle] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'cod'>('online');
+  const [upiReference, setUpiReference] = useState('');
+  const [merchantUpiId, setMerchantUpiId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [orderError, setOrderError] = useState('');
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
   const [createdInvoice, setCreatedInvoice] = useState<Invoice | null>(null);
+
+  // Merchant UPI ID comes from the owner-managed store configuration
+  // (never hardcoded). A missing value simply hides the UPI details block.
+  useEffect(() => {
+    void getStoreConfig(STORE_CONFIG_KEYS.upiMerchantId).then(setMerchantUpiId);
+  }, []);
 
   // Replay protection: one stable key per checkout session, so a retry
   // after a network hiccup can never create a second order.
@@ -83,6 +94,12 @@ export const CartPage: React.FC = () => {
       return;
     }
 
+    // Required-field validation before the secure order transaction
+    if (!customerName.trim() || !phone.trim() || !houseBuilding.trim() || !street.trim() || !area.trim() || !city.trim() || !pincode.trim()) {
+      setOrderError('Please fill in all required delivery fields (name, phone, house/building, street, area, city, and pincode).');
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -95,15 +112,18 @@ export const CartPage: React.FC = () => {
           quantity: i.quantity,
           selected_variant: i.selected_variant,
         })),
-        paymentMethod: paymentMethod === 'cod' ? 'Cash on Delivery' : 'Online / UPI',
+        paymentMethod: paymentMethod === 'cod' ? 'Cash on Delivery' : 'UPI',
+        paymentReference: paymentMethod === 'online' ? upiReference.trim() : undefined,
         shippingDetails: {
-          fullName: customerName || user.full_name || 'Customer',
-          phone,
+          fullName: customerName.trim() || user.full_name || 'Customer',
+          phone: phone.trim(),
           email: user.email,
-          street: address,
-          city,
+          house_building: houseBuilding.trim(),
+          street: street.trim(),
+          area: area.trim(),
+          city: city.trim(),
           state: stateName,
-          pincode,
+          pincode: pincode.trim(),
           landmark: instagramHandle ? `IG: @${instagramHandle}` : undefined,
         },
         idempotencyKey: idempotencyKey.current,
@@ -132,7 +152,7 @@ Invoice ID: #${result.invoice?.invoice_number || 'INV-PENDING'}
 *Customer Details:*
 • Name: ${result.order.customer_name}
 • Phone: ${phone}
-• Address: ${address}, ${city} - ${pincode}
+• Address: ${houseBuilding}, ${street}, ${area}, ${city} - ${pincode}
 ${instagramHandle ? `• Instagram: @${instagramHandle.replace('@', '')} (Tag packaging video!)` : ''}
 
 *Order Items:*
@@ -460,14 +480,42 @@ Status: ${result.order.status}`;
 
               <div>
                 <label className="block font-bold text-gray-700 dark:text-stone-300 mb-1">
-                  Street Address *
+                  House / Building / Flat *
                 </label>
                 <input
                   type="text"
                   required
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="House/Flat number, Street, Landmark"
+                  value={houseBuilding}
+                  onChange={(e) => setHouseBuilding(e.target.value)}
+                  placeholder="e.g. B-402, Sunrise Apartments"
+                  className="w-full p-2.5 rounded-xl border border-[#F3DDD5] dark:border-[#7A1921] bg-[#FFF8F5] dark:bg-[#3F070B] text-[#2B1810] dark:text-[#FCF7DC] focus:outline-hidden focus:ring-1 focus:ring-[#789A99]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 dark:text-stone-300 mb-1">
+                  Street / Road *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={street}
+                  onChange={(e) => setStreet(e.target.value)}
+                  placeholder="e.g. MG Road, Near City Mall"
+                  className="w-full p-2.5 rounded-xl border border-[#F3DDD5] dark:border-[#7A1921] bg-[#FFF8F5] dark:bg-[#3F070B] text-[#2B1810] dark:text-[#FCF7DC] focus:outline-hidden focus:ring-1 focus:ring-[#789A99]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 dark:text-stone-300 mb-1">
+                  Area / Locality *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={area}
+                  onChange={(e) => setArea(e.target.value)}
+                  placeholder="e.g. Andheri West"
                   className="w-full p-2.5 rounded-xl border border-[#F3DDD5] dark:border-[#7A1921] bg-[#FFF8F5] dark:bg-[#3F070B] text-[#2B1810] dark:text-[#FCF7DC] focus:outline-hidden focus:ring-1 focus:ring-[#789A99]"
                 />
               </div>
@@ -534,7 +582,7 @@ Status: ${result.order.status}`;
                         : 'border-[#F3DDD5] dark:border-[#7A1921] text-gray-500 hover:border-gray-400'
                     }`}
                   >
-                    <span>UPI / Online</span>
+                    <span>UPI</span>
                   </button>
                   <button
                     type="button"
@@ -548,6 +596,46 @@ Status: ${result.order.status}`;
                     <span>Cash on Delivery</span>
                   </button>
                 </div>
+
+                {/* UPI Payment Section */}
+                {paymentMethod === 'online' && (
+                  <div className="p-3 rounded-xl bg-[#FFF8F5] dark:bg-[#3F070B] border border-[#F3DDD5] dark:border-[#7A1921] space-y-2">
+                    {merchantUpiId ? (
+                      <div className="text-[11px] text-gray-600 dark:text-stone-300">
+                        <span className="font-bold text-[#2B1810] dark:text-[#FCF7DC]">Pay to UPI ID: </span>
+                        <span className="font-mono font-bold select-all">{merchantUpiId}</span>
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-amber-700 dark:text-amber-300">
+                        The UPI ID will be shared with you on WhatsApp after the order is placed.
+                      </div>
+                    )}
+                    <div>
+                      <label className="block font-bold text-gray-700 dark:text-stone-300 mb-1">
+                        UPI Transaction / Reference ID (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={upiReference}
+                        onChange={(e) => setUpiReference(e.target.value)}
+                        placeholder="e.g. 4235XXXXXX21 (after paying)"
+                        className="w-full p-2.5 rounded-xl border border-[#F3DDD5] dark:border-[#7A1921] bg-white dark:bg-[#3F070B] text-[#2B1810] dark:text-[#FCF7DC] focus:outline-hidden focus:ring-1 focus:ring-[#789A99]"
+                      />
+                    </div>
+                    <p className="text-[10px] text-gray-500 dark:text-stone-400">
+                      UPI payments are marked <strong>Pending Verification</strong> until our team confirms
+                      receipt. No automatic payment confirmation is claimed.
+                    </p>
+                  </div>
+                )}
+
+                {paymentMethod === 'cod' && (
+                  <div className="p-3 rounded-xl bg-[#FFF8F5] dark:bg-[#3F070B] border border-[#F3DDD5] dark:border-[#7A1921]">
+                    <p className="text-[11px] text-gray-600 dark:text-stone-300">
+                      Pay in cash to the courier when your package arrives. No advance payment required.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 

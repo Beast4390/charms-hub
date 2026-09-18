@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 
 export const DeveloperDashboard: React.FC = () => {
-  const { user, isAuthenticated, switchRole } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
   const [logs, setLogs] = useState<ActivityLog[]>([]);

@@ -4,15 +4,14 @@ import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import { storeCatalog } from '../../services/storeCatalog';
 import { Sparkles, Mail, Lock, User, ArrowRight, ShoppingBag } from 'lucide-react';
-import { UserRole } from '../../types';
 
 export const RegisterPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<UserRole>('customer');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const { signUp, pendingAction, clearPendingAction } = useAuth();
   const { addToCart } = useCart();
@@ -42,11 +41,18 @@ export const RegisterPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setNotice('');
     setLoading(true);
 
-    const res = await signUp(email, password, fullName, role);
+    const res = await signUp(email, password, fullName);
     setLoading(false);
     if (res.success) {
+      if (res.needsEmailConfirmation) {
+        setNotice(
+          'Account created! We sent a confirmation link to your email. Please confirm your address, then sign in to continue.'
+        );
+        return;
+      }
       handlePostAuthRedirect();
     } else {
       setError(res.error || 'Failed to create account');
@@ -85,6 +91,12 @@ export const RegisterPage: React.FC = () => {
         {error && (
           <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-300 text-xs">
             {error}
+          </div>
+        )}
+
+        {notice && (
+          <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-300 text-xs">
+            {notice}
           </div>
         )}
 
@@ -138,21 +150,6 @@ export const RegisterPage: React.FC = () => {
                 className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-[#F3DDD5] dark:border-[#7A1921] bg-[#FFF8F5] dark:bg-[#3F070B] text-[#2B1810] dark:text-[#FCF7DC] focus:outline-hidden focus:ring-1 focus:ring-[#789A99]"
               />
             </div>
-          </div>
-
-          <div>
-            <label className="block font-bold text-gray-700 dark:text-stone-300 mb-1">
-              Account Role
-            </label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as UserRole)}
-              className="w-full px-3 py-2.5 rounded-xl border border-[#F3DDD5] dark:border-[#7A1921] bg-[#FFF8F5] dark:bg-[#3F070B] text-[#2B1810] dark:text-[#FCF7DC] focus:outline-hidden focus:ring-1 focus:ring-[#789A99]"
-            >
-              <option value="customer">Customer (Storefront & Invoices)</option>
-              <option value="shop_owner">Shop Owner (Catalog, Appearance & Orders)</option>
-              <option value="developer">Developer (System Audits & Metrics)</option>
-            </select>
           </div>
 
           <button

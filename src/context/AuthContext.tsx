@@ -1,17 +1,33 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '../services/supabase';
 import { UserProfile, UserRole, PendingShoppingAction } from '../types';
 import { logActivity } from '../services/activityLogger';
+
+interface AuthResult {
+  success: boolean;
+  error?: string;
+  /** True when the account was created but the session is pending email confirmation. */
+  needsEmailConfirmation?: boolean;
+}
 
 interface AuthContextType {
   user: UserProfile | null;
   role: UserRole;
   loading: boolean;
-  signIn: (email: string, password?: string, roleOverride?: UserRole) => Promise<{ success: boolean; error?: string }>;
-  signUp: (email: string, password?: string, fullName?: string, requestedRole?: UserRole) => Promise<{ success: boolean; error?: string }>;
+  /**
+   * Supabase Auth is the single source of truth. The roleOverride parameter
+   * is accepted for demo-login compatibility but is IGNORED — the role is
+   * always read from the database-backed user_profiles row.
+   */
+  signIn: (email: string, password?: string, roleOverride?: UserRole) => Promise<AuthResult>;
+  /**
+   * Roles are assigned server-side (signup trigger defaults to 'customer').
+   * requestedRole is accepted for signature compatibility but is IGNORED.
+   */
+  signUp: (email: string, password?: string, fullName?: string, requestedRole?: UserRole) => Promise<AuthResult>;
   signOut: () => Promise<void>;
   updateProfile: (profile: Partial<UserProfile>) => void;
-  switchRole: (newRole: UserRole) => void;
   isAuthenticated: boolean;
   pendingAction: PendingShoppingAction | null;
   setPendingAction: (action: PendingShoppingAction | null) => void;
@@ -21,24 +37,12 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const PENDING_ACTION_KEY = 'charms_hub_pending_shopping_action';
+// Legacy key written by the pre-Phase A local-fallback auth. Stale cached
+// profiles (and their client-assigned roles) must never be trusted again.
+const LEGACY_AUTH_CACHE_KEY = 'charms_hub_auth_user';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<UserProfile | null>(() => {
-    try {
-      const saved = localStorage.getItem('charms_hub_auth_user');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return {
-          ...parsed,
-          role: parsed.role || 'customer',
-        };
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  });
-
+  const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [pendingAction, setPendingActionState] = useState<PendingShoppingAction | null>(() => {
@@ -71,104 +75,128 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPendingAction(null);
   };
 
-  useEffect(() => {
-    const initAuth = async () => {
-      if (isSupabaseConfigured && supabase) {
-        try {
-          const { data } = await supabase.auth.getSession();
-          if (data.session?.user) {
-            const sbUser = data.session.user;
-            const existingRole = (sbUser.user_metadata?.role as UserRole) || 'customer';
-            const profile: UserProfile = {
-              id: sbUser.id,
-              email: sbUser.email || '',
-              role: existingRole,
-              full_name: sbUser.user_metadata?.full_name || 'Charms Hub User',
-            };
-            setUser(profile);
-            localStorage.setItem('charms_hub_auth_user', JSON.stringify(profile));
-          }
-        } catch (err) {
-          console.warn('Supabase session check error:', err);
-        }
-      }
+  const applySession = useCallback(async (session: Session | null): Promise<UserProfile | null> => {
+    if (!session?.user) {
+      setUser(null);
       setLoading(false);
+      return null;
+    }
+
+    const sbUser = session.user;
+    // Least-privilege baseline from the verified JWT; DB values take precedence.
+    let profile: UserProfile = {
+      id: sbUser.id,
+      email: sbUser.email || '',
+      role: 'customer',
+      full_name:
+        (sbUser.user_metadata?.full_name as string) ||
+        sbUser.email?.split('@')[0] ||
+        'Charms Hub User',
     };
 
-    initAuth();
+    if (supabase) {
+      // Role and profile details come from the database-backed user_profiles
+      // row — the authoritative authorization source (readable via RLS
+      // "Users can view own profile").
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('role, full_name, phone, shipping_address')
+        .eq('id', sbUser.id)
+        .maybeSingle();
+
+      if (!error && data) {
+        profile = {
+          ...profile,
+          role: (data.role as UserRole) || 'customer',
+          full_name: data.full_name || profile.full_name,
+          phone: data.phone || undefined,
+          shipping_address: data.shipping_address || undefined,
+        };
+      } else if (error) {
+        console.warn('[Auth] user_profiles unavailable, using customer role:', error.message);
+      }
+    }
+
+    setUser(profile);
+    setLoading(false);
+    return profile;
   }, []);
 
-  const detectRoleFromEmail = (email: string, requestedRole?: UserRole): UserRole => {
-    if (requestedRole) return requestedRole;
-    const lower = email.toLowerCase();
-    if (lower.includes('developer') || lower.includes('admin@') || lower.includes('dev@')) {
-      return 'developer';
+  useEffect(() => {
+    // Purge the legacy local-auth cache from older app versions.
+    try {
+      localStorage.removeItem(LEGACY_AUTH_CACHE_KEY);
+    } catch {
+      /* ignore */
     }
-    if (lower.includes('owner') || lower.includes('shop@') || lower.includes('store@')) {
-      return 'shop_owner';
-    }
-    return 'customer';
-  };
 
-  const signIn = async (email: string, password?: string, roleOverride?: UserRole) => {
+    if (!isSupabaseConfigured || !supabase) {
+      // Supabase Auth is authoritative; without it there is no authentication.
+      setLoading(false);
+      return;
+    }
+
+    let mounted = true;
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (mounted) applySession(data.session);
+    });
+
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setLoading(false);
+      } else if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') {
+        applySession(session);
+      }
+      // INITIAL_SESSION is handled by the explicit getSession() call above.
+    });
+
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
+    };
+  }, [applySession]);
+
+  const signIn = async (email: string, password?: string, _roleOverride?: UserRole): Promise<AuthResult> => {
     setLoading(true);
     try {
-      const assignedRole = detectRoleFromEmail(email, roleOverride);
-
-      if (isSupabaseConfigured && supabase && password) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) {
-          setLoading(false);
-          return { success: false, error: error.message };
-        }
-        if (data.user) {
-          const role = (data.user.user_metadata?.role as UserRole) || assignedRole;
-          const profile: UserProfile = {
-            id: data.user.id,
-            email: data.user.email || email,
-            role,
-            full_name: data.user.user_metadata?.full_name || email.split('@')[0],
-          };
-          setUser(profile);
-          localStorage.setItem('charms_hub_auth_user', JSON.stringify(profile));
-
-          await logActivity({
-            userId: profile.id,
-            userEmail: profile.email,
-            role: profile.role,
-            eventType: 'user_login',
-            entityType: 'auth',
-            entityId: profile.id,
-            metadata: { method: 'supabase_auth' },
-          });
-
-          setLoading(false);
-          return { success: true };
-        }
+      if (!supabase) {
+        setLoading(false);
+        return {
+          success: false,
+          error: 'Authentication is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable sign-in.',
+        };
+      }
+      if (!password) {
+        setLoading(false);
+        return { success: false, error: 'Password is required.' };
       }
 
-      // Local / Offline-Resilient fallback
-      const localUser: UserProfile = {
-        id: 'usr_' + Date.now(),
-        email,
-        role: assignedRole,
-        full_name: email.split('@')[0],
-      };
-      setUser(localUser);
-      localStorage.setItem('charms_hub_auth_user', JSON.stringify(localUser));
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
 
-      await logActivity({
-        userId: localUser.id,
-        userEmail: localUser.email,
-        role: localUser.role,
+      if (error || !data.user || !data.session) {
+        setLoading(false);
+        return { success: false, error: error?.message || 'Sign in failed' };
+      }
+
+      // Apply the profile immediately (before onAuthStateChange fires) so
+      // post-login navigation sees an authenticated user.
+      const profile = await applySession(data.session);
+
+      logActivity({
+        userId: data.user.id,
+        userEmail: data.user.email || email,
+        role: profile?.role || 'customer',
         eventType: 'user_login',
         entityType: 'auth',
-        entityId: localUser.id,
-        metadata: { method: 'resilient_local_auth', assigned_role: localUser.role },
-      });
+        entityId: data.user.id,
+        metadata: { method: 'supabase_auth' },
+      }).catch(() => undefined);
 
       setLoading(false);
       return { success: true };
@@ -182,68 +210,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     email: string,
     password?: string,
     fullName?: string,
-    requestedRole?: UserRole
-  ) => {
+    _requestedRole?: UserRole
+  ): Promise<AuthResult> => {
     setLoading(true);
     try {
-      const assignedRole = detectRoleFromEmail(email, requestedRole);
-
-      if (isSupabaseConfigured && supabase && password) {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { full_name: fullName, role: assignedRole },
-          },
-        });
-        if (error) {
-          setLoading(false);
-          return { success: false, error: error.message };
-        }
-        if (data.user) {
-          const profile: UserProfile = {
-            id: data.user.id,
-            email: data.user.email || email,
-            role: assignedRole,
-            full_name: fullName || email.split('@')[0],
-          };
-          setUser(profile);
-          localStorage.setItem('charms_hub_auth_user', JSON.stringify(profile));
-
-          await logActivity({
-            userId: profile.id,
-            userEmail: profile.email,
-            role: profile.role,
-            eventType: 'user_register',
-            entityType: 'auth',
-            entityId: profile.id,
-            metadata: { method: 'supabase_auth' },
-          });
-
-          setLoading(false);
-          return { success: true };
-        }
+      if (!supabase) {
+        setLoading(false);
+        return {
+          success: false,
+          error: 'Authentication is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable registration.',
+        };
+      }
+      if (!password || password.length < 6) {
+        setLoading(false);
+        return { success: false, error: 'Password must be at least 6 characters.' };
       }
 
-      // Local mock fallback
-      const localUser: UserProfile = {
-        id: 'usr_' + Date.now(),
-        email,
-        role: assignedRole,
-        full_name: fullName || email.split('@')[0],
-      };
-      setUser(localUser);
-      localStorage.setItem('charms_hub_auth_user', JSON.stringify(localUser));
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: { full_name: fullName || '' },
+        },
+      });
 
-      await logActivity({
-        userId: localUser.id,
-        userEmail: localUser.email,
-        role: localUser.role,
+      if (error) {
+        setLoading(false);
+        return { success: false, error: error.message };
+      }
+
+      if (!data.user) {
+        setLoading(false);
+        return { success: false, error: 'Registration failed. Please try again.' };
+      }
+
+      // Server-side trigger creates the user_profiles row (role 'customer').
+      if (!data.session) {
+        // Email confirmation is enabled on this project.
+        setLoading(false);
+        return { success: true, needsEmailConfirmation: true };
+      }
+
+      await applySession(data.session);
+
+      logActivity({
+        userId: data.user.id,
+        userEmail: data.user.email || email,
+        role: 'customer',
         eventType: 'user_register',
         entityType: 'auth',
-        entityId: localUser.id,
-        metadata: { method: 'resilient_local_auth', role: localUser.role },
-      });
+        entityId: data.user.id,
+        metadata: { method: 'supabase_auth' },
+      }).catch(() => undefined);
 
       setLoading(false);
       return { success: true };
@@ -255,17 +273,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     if (user) {
-      await logActivity({
+      logActivity({
         userId: user.id,
         userEmail: user.email,
         role: user.role,
         eventType: 'user_logout',
         entityType: 'auth',
         entityId: user.id,
-      });
+      }).catch(() => undefined);
     }
 
-    if (isSupabaseConfigured && supabase) {
+    if (supabase) {
       try {
         await supabase.auth.signOut();
       } catch (err) {
@@ -273,46 +291,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
     setUser(null);
-    localStorage.removeItem('charms_hub_auth_user');
   };
 
   const updateProfile = (updates: Partial<UserProfile>) => {
     if (!user) return;
-    const updated = { ...user, ...updates };
-    setUser(updated);
-    localStorage.setItem('charms_hub_auth_user', JSON.stringify(updated));
-  };
+    const previous = user;
 
-  const switchRole = (newRole: UserRole) => {
-    if (!user) {
-      // Create guest demo user with this role
-      const demoUser: UserProfile = {
-        id: `demo_${newRole}_${Date.now()}`,
-        email: `${newRole}@charmshub.ai`,
-        role: newRole,
-        full_name: newRole === 'shop_owner' ? 'Shop Owner' : newRole === 'developer' ? 'Lead Developer' : 'Valued Shopper',
-      };
-      setUser(demoUser);
-      localStorage.setItem('charms_hub_auth_user', JSON.stringify(demoUser));
-      return;
-    }
+    // Optimistic update, reconciled with the database result.
+    setUser({ ...user, ...updates });
 
-    const updated: UserProfile = {
-      ...user,
-      role: newRole,
-    };
-    setUser(updated);
-    localStorage.setItem('charms_hub_auth_user', JSON.stringify(updated));
+    if (!supabase) return;
 
-    logActivity({
-      userId: user.id,
-      userEmail: user.email,
-      role: newRole,
-      eventType: 'role_switched',
-      entityType: 'auth',
-      entityId: user.id,
-      metadata: { previous_role: user.role, new_role: newRole },
-    });
+    const patch: Record<string, unknown> = {};
+    if (updates.full_name !== undefined) patch.full_name = updates.full_name;
+    if (updates.phone !== undefined) patch.phone = updates.phone;
+    if (updates.shipping_address !== undefined) patch.shipping_address = updates.shipping_address;
+    if (Object.keys(patch).length === 0) return;
+
+    supabase
+      .from('user_profiles')
+      .update(patch)
+      .eq('id', user.id)
+      .select('role, full_name, phone, shipping_address')
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error || !data) {
+          console.warn('Profile update failed, reverting:', error?.message);
+          setUser(previous);
+          return;
+        }
+        setUser((prev) =>
+          prev
+            ? {
+                ...prev,
+                role: (data.role as UserRole) || prev.role,
+                full_name: data.full_name || prev.full_name,
+                phone: data.phone || prev.phone,
+                shipping_address: data.shipping_address || prev.shipping_address,
+              }
+            : prev
+        );
+      });
   };
 
   return (
@@ -325,7 +344,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signUp,
         signOut,
         updateProfile,
-        switchRole,
         isAuthenticated: Boolean(user),
         pendingAction,
         setPendingAction,

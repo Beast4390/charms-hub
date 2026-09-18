@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getUserOrders, getInvoiceByOrderId } from '../../services/orderService';
 import { downloadInvoicePDF } from '../../services/invoiceGenerator';
-import { Order, Invoice, UserRole } from '../../types';
+import { Order, Invoice } from '../../types';
 import {
   User,
   Package,
@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 
 export const AccountPage: React.FC = () => {
-  const { user, signOut, isAuthenticated, updateProfile, switchRole } = useAuth();
+  const { user, signOut, isAuthenticated, updateProfile } = useAuth();
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState<Order[]>([]);
@@ -165,31 +165,8 @@ export const AccountPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Demo Role Switcher for Hackathon Judges & Evaluators */}
-      <div className="p-4 rounded-2xl bg-[#FFF8F5] dark:bg-[#5B0E14] border border-[#F3DDD5] dark:border-[#7A1921] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-2 text-[#2B1810] dark:text-[#FCF7DC]">
-          <Shield className="w-4 h-4 text-[#789A99] dark:text-[#F1E194]" />
-          <span className="font-bold">Evaluation Role Switcher:</span>
-          <span className="text-gray-500 dark:text-stone-300">
-            Switch your active role instantly to test role-based access &amp; dashboards.
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {(['customer', 'shop_owner', 'developer'] as UserRole[]).map((r) => (
-            <button
-              key={r}
-              onClick={() => switchRole(r)}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold transition cursor-pointer ${
-                user?.role === r
-                  ? 'bg-[#789A99] text-white shadow-xs'
-                  : 'bg-white dark:bg-[#7A1921] text-[#2B1810] dark:text-[#FCF7DC] border border-[#F3DDD5] dark:border-[#8F1F28] hover:border-[#789A99]'
-              }`}
-            >
-              {r === 'shop_owner' ? 'Shop Owner' : r === 'developer' ? 'Developer' : 'Customer'}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* Role-based workspace links are rendered contextually in the header
+          card above; roles are assigned server-side in user_profiles. */}
 
       {/* Profile Edit Form */}
       {editing && (

@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 
 export const ShopOwnerDashboard: React.FC = () => {
-  const { user, isAuthenticated, switchRole } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<'catalog' | 'orders' | 'appearance' | 'logs'>('catalog');
@@ -284,21 +284,13 @@ export const ShopOwnerDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Role Notice & Switcher if role not shop_owner */}
+      {/* Role Notice if role not shop_owner (roles are database-assigned; no client escalation) */}
       {user?.role !== 'shop_owner' && (
-        <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
-            <AlertCircle className="w-4 h-4" />
-            <span>
-              You are currently logged in as <strong>{user?.role}</strong>. Switch to <strong>Shop Owner</strong> for full operational capabilities.
-            </span>
-          </div>
-          <button
-            onClick={() => switchRole('shop_owner')}
-            className="px-3 py-1 rounded-xl bg-amber-600 text-white font-bold text-xs hover:bg-amber-700 cursor-pointer"
-          >
-            Switch to Shop Owner
-          </button>
+        <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center gap-2 text-xs">
+          <AlertCircle className="w-4 h-4 text-amber-800 dark:text-amber-200 shrink-0" />
+          <span className="text-amber-800 dark:text-amber-200">
+            You are signed in as <strong>{user?.role}</strong>. Only accounts with the Shop Owner role (assigned by the store's developers) can manage the catalog, orders, and appearance.
+          </span>
         </div>
       )}
 

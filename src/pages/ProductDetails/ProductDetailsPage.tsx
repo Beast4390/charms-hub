@@ -34,13 +34,16 @@ export const ProductDetailsPage: React.FC = () => {
   const [product, setProduct] = useState(() =>
     storeCatalog.getProductById(productId || '') || VERIFIED_PRODUCTS.find((p) => p.id === productId)
   );
+  const [catalogStatus, setCatalogStatus] = useState(() => storeCatalog.getCatalogStatus());
 
   useEffect(() => {
     const updateProductData = () => {
       const p = storeCatalog.getProductById(productId || '') || VERIFIED_PRODUCTS.find((item) => item.id === productId);
       setProduct(p);
+      setCatalogStatus(storeCatalog.getCatalogStatus());
     };
     updateProductData();
+    void storeCatalog.ensureLoaded().finally(updateProductData);
     window.addEventListener('charms_hub_catalog_changed', updateProductData);
     return () => window.removeEventListener('charms_hub_catalog_changed', updateProductData);
   }, [productId]);
@@ -56,6 +59,16 @@ export const ProductDetailsPage: React.FC = () => {
   }, [product]);
 
   if (!product) {
+    if (catalogStatus.loading) {
+      return (
+        <div className="max-w-3xl mx-auto px-4 py-24 text-center space-y-4">
+          <span className="inline-block w-3 h-3 rounded-full bg-[#789A99] dark:bg-[#F1E194] animate-ping" />
+          <p className="text-xs font-semibold text-gray-500 dark:text-stone-400">
+            Checking the verified catalog…
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="max-w-3xl mx-auto px-4 py-24 text-center space-y-4">
         <h2 className="font-serif-display text-2xl font-bold text-[#2B1810] dark:text-[#FCF7DC]">

@@ -1,24 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { SearchBar } from '../../components/SearchBar/SearchBar';
 import { CategoryCard } from '../../components/CategoryCard/CategoryCard';
 import { ProductGrid } from '../../components/ProductGrid/ProductGrid';
 import { VERIFIED_CATEGORIES } from '../../data/categories';
-import { storeCatalog } from '../../services/storeCatalog';
-import { Sparkles, ArrowRight, ShieldCheck, Truck, RefreshCw } from 'lucide-react';
+import { useCatalog } from '../../hooks/useCatalog';
+import { Sparkles, ArrowRight, ShieldCheck, Truck, RefreshCw, AlertTriangle } from 'lucide-react';
 
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
   const [activeBanner, setActiveBanner] = useState(0);
-  const [productsList, setProductsList] = useState(() => storeCatalog.getProducts(false));
-
-  useEffect(() => {
-    const handleCatalogUpdate = () => {
-      setProductsList(storeCatalog.getProducts(false));
-    };
-    window.addEventListener('charms_hub_catalog_changed', handleCatalogUpdate);
-    return () => window.removeEventListener('charms_hub_catalog_changed', handleCatalogUpdate);
-  }, []);
+  const { products: productsList, loading, error, reload } = useCatalog(false);
 
   const mysteryScoopProducts = productsList.filter((p) => p.is_mystery_scoop);
   const kashmiriEarringProducts = productsList.filter((p) => p.is_kashmiri_earring);
@@ -66,6 +58,32 @@ export const HomePage: React.FC = () => {
       <section className="max-w-4xl mx-auto px-4 pt-4 sm:pt-6">
         <SearchBar />
       </section>
+
+      {/* Cloud Catalog Status */}
+      {(loading || error) && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {loading && (
+            <div className="flex items-center justify-center gap-2 py-3 text-xs text-gray-500 dark:text-stone-400">
+              <span className="w-2 h-2 rounded-full bg-[#789A99] dark:bg-[#F1E194] animate-ping" />
+              <span>Syncing the verified catalog…</span>
+            </div>
+          )}
+          {error && !loading && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200">
+              <span className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                {error}
+              </span>
+              <button
+                onClick={reload}
+                className="px-3 py-1.5 rounded-xl bg-amber-600 text-white font-bold hover:bg-amber-700 transition cursor-pointer"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Categories Bubble Strip (matching video at 0:05 and 0:59) */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

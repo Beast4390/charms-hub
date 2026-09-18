@@ -3,16 +3,92 @@ import { VERIFIED_CATEGORIES } from '../data/categories';
 import { VERIFIED_KNOWLEDGE_BASE } from '../data/knowledgeBase';
 import { PRODUCT_IMAGE_MAP, validateProductImage } from '../data/productImageMap';
 import { Product, Category, KnowledgeItem } from '../types';
+import { supabase, isSupabaseConfigured } from './supabase';
 
-const PRODUCTS_STORAGE_KEY = 'charms_hub_dynamic_products';
+// localStorage holds ONLY a read cache for instant first paint and
+// development without cloud access. The Supabase products table is the
+// authoritative source of truth; every successful cloud load replaces
+// the in-memory catalog and rewrites this cache.
+const PRODUCTS_CACHE_KEY = 'charms_hub_dynamic_products';
 const CATEGORIES_STORAGE_KEY = 'charms_hub_dynamic_categories';
 const KNOWLEDGE_STORAGE_KEY = 'charms_hub_dynamic_knowledge';
 const RAG_SYNC_STORAGE_KEY = 'charms_hub_rag_last_sync';
+
+export interface CatalogWriteResult<T = undefined> {
+  success: boolean;
+  product?: T extends undefined ? never : Product;
+  error?: string;
+}
+
+export interface CatalogStatus {
+  loading: boolean;
+  error: string | null;
+  cloudLoaded: boolean;
+}
+
+/** Columns mirrored to the products table (excludes client-only fields). */
+function toDbRow(p: Product): Record<string, unknown> {
+  return {
+    id: p.id,
+    name: p.name,
+    slug: p.slug,
+    description: p.description,
+    price: p.price,
+    mrp: p.mrp ?? null,
+    discount_percent: p.discount_percent ?? null,
+    category_id: p.category_id,
+    category_name: p.category_name ?? null,
+    image_url: p.image_url,
+    additional_images: p.additional_images ?? [],
+    in_stock: p.in_stock ?? true,
+    featured: p.featured ?? false,
+    is_active: p.is_active ?? true,
+    archived_at: p.archived_at ?? null,
+    source: p.source,
+    reference_verified: p.reference_verified,
+    is_mystery_scoop: p.is_mystery_scoop ?? false,
+    is_kashmiri_earring: p.is_kashmiri_earring ?? false,
+    tags: p.tags ?? [],
+    created_at: p.created_at,
+    updated_at: p.updated_at,
+  };
+}
+
+/** Normalize a DB row or cached catalog entry into the client Product shape. */
+function fromDbRow(row: Record<string, unknown> | Product): Product {
+  const r = row as Record<string, unknown>;
+  return {
+    ...(r as unknown as Product),
+    additional_images: (r.additional_images as string[]) || [],
+    tags: (r.tags as string[]) || [],
+    in_stock: r.in_stock !== false,
+    featured: Boolean(r.featured),
+    is_active: r.is_active !== false,
+    is_mystery_scoop: Boolean(r.is_mystery_scoop),
+    is_kashmiri_earring: Boolean(r.is_kashmiri_earring),
+  };
+}
+
+function validateProductInput(data: Partial<Product>): string | null {
+  if (!data.name || !data.name.trim()) return 'Product name is required.';
+  const price = Number(data.price);
+  if (!Number.isFinite(price) || price <= 0) return 'Price must be a positive number.';
+  if (data.mrp != null && data.mrp !== ('' as unknown) && Number(data.mrp) < price) {
+    return 'MRP cannot be lower than the selling price.';
+  }
+  if (!data.image_url || !String(data.image_url).trim()) return 'Image URL is required.';
+  if (!data.category_id) return 'Category is required.';
+  return null;
+}
 
 class StoreCatalogService {
   private products: Product[] = [];
   private categories: Category[] = [];
   private knowledgeBase: KnowledgeItem[] = [];
+  private catalogLoading = false;
+  private catalogError: string | null = null;
+  private cloudLoaded = false;
+  private loadPromise: Promise<{ ok: boolean; error?: string }> | null = null;
 
   constructor() {
     this.initCatalog();
@@ -22,11 +98,7 @@ class StoreCatalogService {
     // 1. Categories
     try {
       const savedCats = localStorage.getItem(CATEGORIES_STORAGE_KEY);
-      if (savedCats) {
-        this.categories = JSON.parse(savedCats);
-      } else {
-        this.categories = [...VERIFIED_CATEGORIES];
-      }
+      this.categories = savedCats ? JSON.parse(savedCats) : [...VERIFIED_CATEGORIES];
     } catch {
       this.categories = [...VERIFIED_CATEGORIES];
     }
@@ -34,71 +106,85 @@ class StoreCatalogService {
     // 2. Knowledge Base
     try {
       const savedKB = localStorage.getItem(KNOWLEDGE_STORAGE_KEY);
-      if (savedKB) {
-        this.knowledgeBase = JSON.parse(savedKB);
-      } else {
-        this.knowledgeBase = [...VERIFIED_KNOWLEDGE_BASE];
-      }
+      this.knowledgeBase = savedKB ? JSON.parse(savedKB) : [...VERIFIED_KNOWLEDGE_BASE];
     } catch {
       this.knowledgeBase = [...VERIFIED_KNOWLEDGE_BASE];
     }
 
-    // 3. Products
+    // 3. Products — cache for instant first paint; the cloud load below
+    //    (authoritative) replaces it and rewrites the cache.
     try {
-      const savedProducts = localStorage.getItem(PRODUCTS_STORAGE_KEY);
-      if (savedProducts) {
-        const parsed: Product[] = JSON.parse(savedProducts);
-        // Ensure all verified products exist, merged with user edits
-        const map = new Map<string, Product>();
-        // Base verified items
-        for (const vp of VERIFIED_PRODUCTS) {
-          map.set(vp.id, { ...vp, is_active: true });
-        }
-        // Apply saved overrides or additions
-        for (const sp of parsed) {
-          map.set(sp.id, sp);
-        }
-        this.products = Array.from(map.values());
-      } else {
-        this.products = VERIFIED_PRODUCTS.map((p) => ({
-          ...p,
-          is_active: true,
-          archived_at: null,
-        }));
-      }
+      const cached = localStorage.getItem(PRODUCTS_CACHE_KEY);
+      this.products = cached
+        ? (JSON.parse(cached) as Product[]).map(fromDbRow)
+        : VERIFIED_PRODUCTS.map((p) => ({ ...p, is_active: true, archived_at: null }));
     } catch {
-      this.products = VERIFIED_PRODUCTS.map((p) => ({
-        ...p,
-        is_active: true,
-        archived_at: null,
-      }));
+      this.products = VERIFIED_PRODUCTS.map((p) => ({ ...p, is_active: true, archived_at: null }));
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      void this.loadFromCloud();
     }
   }
 
-  private saveProducts() {
+  // --- Cloud synchronization ---
+
+  public getCatalogStatus(): CatalogStatus {
+    return { loading: this.catalogLoading, error: this.catalogError, cloudLoaded: this.cloudLoaded };
+  }
+
+  /** Single-flight initial cloud load; resolves immediately once loaded. */
+  public ensureLoaded(): Promise<{ ok: boolean; error?: string }> {
+    if (this.cloudLoaded) return Promise.resolve({ ok: true });
+    if (!this.loadPromise) {
+      this.loadPromise = this.loadFromCloud().finally(() => {
+        this.loadPromise = null;
+      });
+    }
+    return this.loadPromise;
+  }
+
+  public async loadFromCloud(): Promise<{ ok: boolean; error?: string }> {
+    if (!isSupabaseConfigured || !supabase) {
+      return { ok: false, error: 'Supabase is not configured' };
+    }
+
+    this.catalogLoading = true;
+    this.notifyChanges();
+
     try {
-      localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(this.products));
+      const { data, error } = await supabase.from('products').select('*');
+      if (error) throw new Error(error.message);
+
+      if (data && data.length > 0) {
+        // Cloud is the source of truth: replace the entire in-memory catalog.
+        this.products = data.map((row) => fromDbRow(row as Record<string, unknown>));
+        this.cloudLoaded = true;
+        this.catalogError = null;
+        this.saveProductsCache();
+      } else {
+        // Fresh project without the seed migration — keep the bundled
+        // verified catalog visible rather than an empty storefront.
+        this.products = VERIFIED_PRODUCTS.map((p) => ({ ...p, is_active: true, archived_at: null }));
+        this.catalogError = 'Cloud catalog is empty; showing the bundled verified catalog.';
+      }
+      this.catalogLoading = false;
       this.notifyChanges();
-    } catch (e) {
-      console.error('Failed to persist products:', e);
+      return { ok: true };
+    } catch (err) {
+      this.catalogLoading = false;
+      this.catalogError = err instanceof Error ? err.message : 'Failed to load catalog from cloud';
+      console.error('Cloud catalog load failed, serving cached catalog:', err);
+      this.notifyChanges();
+      return { ok: false, error: this.catalogError };
     }
   }
 
-  private saveCategories() {
+  private saveProductsCache() {
     try {
-      localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(this.categories));
-      this.notifyChanges();
+      localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(this.products));
     } catch (e) {
-      console.error('Failed to persist categories:', e);
-    }
-  }
-
-  private saveKnowledge() {
-    try {
-      localStorage.setItem(KNOWLEDGE_STORAGE_KEY, JSON.stringify(this.knowledgeBase));
-      this.notifyChanges();
-    } catch (e) {
-      console.error('Failed to persist knowledge base:', e);
+      console.error('Failed to persist product cache:', e);
     }
   }
 
@@ -108,7 +194,17 @@ class StoreCatalogService {
     }
   }
 
-  // --- Public Product Methods ---
+  /** Applies a validated cloud write to memory, cache and subscribers. */
+  private applyWrite(product: Product) {
+    const idx = this.products.findIndex((p) => p.id === product.id);
+    if (idx >= 0) this.products[idx] = product;
+    else this.products.unshift(product);
+    this.saveProductsCache();
+    this.syncRAGKnowledge();
+    this.notifyChanges();
+  }
+
+  // --- Public Product Methods (reads stay synchronous via the cache) ---
 
   public getProducts(includeArchived = false): Product[] {
     if (includeArchived) {
@@ -121,16 +217,28 @@ class StoreCatalogService {
     return this.products.find((p) => p.id === id);
   }
 
-  public addProduct(productData: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Product {
+  public async addProduct(
+    productData: Omit<Product, 'id' | 'created_at' | 'updated_at' | 'reference_verified'> & { reference_verified?: boolean }
+  ): Promise<CatalogWriteResult<Product>> {
+    if (!supabase) return { success: false, error: 'Cloud catalog unavailable (Supabase not configured).' };
+
+    const invalid = validateProductInput(productData);
+    if (invalid) return { success: false, error: invalid };
+
     const slug = productData.name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '');
 
+    if (this.products.some((p) => p.slug === slug)) {
+      return { success: false, error: `A product with the name "${productData.name}" already exists.` };
+    }
+
     const id = `ch-prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const now = new Date().toISOString();
 
-    // Verification check: only mark true if verified against known sources
+    // Verification check: only mark true if verified against known sources.
+    // Owner-uploaded imagery is never auto-verified.
     const isReferenceVerified = Boolean(
       productData.reference_verified || PRODUCT_IMAGE_MAP[id] === productData.image_url
     );
@@ -145,110 +253,115 @@ class StoreCatalogService {
       updated_at: now,
     };
 
-    this.products.unshift(newProduct);
-    this.saveProducts();
-    this.syncRAGKnowledge();
-    return newProduct;
-  }
-
-  public updateProduct(id: string, updates: Partial<Product>): Product | null {
-    const idx = this.products.findIndex((p) => p.id === id);
-    if (idx === -1) return null;
-
-    const current = this.products[idx];
-    const updated: Product = {
-      ...current,
-      ...updates,
-      id: current.id, // Immutable ID
-      updated_at: new Date().toISOString(),
-    };
-
-    // Calculate discount if price and MRP exist
-    if (updated.mrp && updated.mrp > updated.price) {
-      updated.discount_percent = Math.round(((updated.mrp - updated.price) / updated.mrp) * 100);
+    const { error } = await supabase.from('products').insert([toDbRow(newProduct)]);
+    if (error) {
+      if (error.code === '23505') {
+        return { success: false, error: 'A product with this name already exists.' };
+      }
+      return { success: false, error: error.message };
     }
 
-    this.products[idx] = updated;
-    this.saveProducts();
-    this.syncRAGKnowledge();
-    return updated;
+    this.applyWrite(newProduct);
+    return { success: true, product: newProduct };
   }
 
-  public archiveProduct(id: string): boolean {
-    const product = this.products.find((p) => p.id === id);
-    if (!product) return false;
-    product.is_active = false;
-    product.archived_at = new Date().toISOString();
-    product.updated_at = new Date().toISOString();
-    this.saveProducts();
-    this.syncRAGKnowledge();
-    return true;
-  }
+  public async updateProduct(id: string, updates: Partial<Product>): Promise<CatalogWriteResult<Product>> {
+    if (!supabase) return { success: false, error: 'Cloud catalog unavailable (Supabase not configured).' };
 
-  public restoreProduct(id: string): boolean {
-    const product = this.products.find((p) => p.id === id);
-    if (!product) return false;
-    product.is_active = true;
-    product.archived_at = null;
-    product.updated_at = new Date().toISOString();
-    this.saveProducts();
-    this.syncRAGKnowledge();
-    return true;
-  }
+    const current = this.products.find((p) => p.id === id);
+    if (!current) return { success: false, error: 'Product not found.' };
 
-  public updateProductStock(id: string, inStock: boolean): boolean {
-    const product = this.products.find((p) => p.id === id);
-    if (!product) return false;
-    product.in_stock = inStock;
-    product.updated_at = new Date().toISOString();
-    this.saveProducts();
-    this.syncRAGKnowledge();
-    return true;
-  }
+    const merged: Product = { ...current, ...updates, id: current.id, slug: current.slug };
 
-  public updateProductPrice(id: string, price: number, mrp?: number, discount?: number): boolean {
-    const product = this.products.find((p) => p.id === id);
-    if (!product || price <= 0) return false;
-    product.price = price;
-    if (mrp !== undefined) product.mrp = mrp;
-    if (discount !== undefined) {
-      product.discount_percent = discount;
-    } else if (product.mrp && product.mrp > product.price) {
-      product.discount_percent = Math.round(((product.mrp - product.price) / product.mrp) * 100);
+    const invalid = validateProductInput(merged);
+    if (invalid) return { success: false, error: invalid };
+
+    // Recalculate discount whenever price and MRP exist.
+    if (merged.mrp && merged.mrp > merged.price) {
+      merged.discount_percent = Math.round(((merged.mrp - merged.price) / merged.mrp) * 100);
     }
-    product.updated_at = new Date().toISOString();
-    this.saveProducts();
-    this.syncRAGKnowledge();
-    return true;
+    merged.updated_at = new Date().toISOString();
+
+    const { error } = await supabase.from('products').update(toDbRow(merged)).eq('id', id);
+    if (error) return { success: false, error: error.message };
+
+    this.applyWrite(merged);
+    return { success: true, product: merged };
   }
 
-  public updateProductImage(
+  public async archiveProduct(id: string): Promise<CatalogWriteResult> {
+    return this.patchProduct(id, {
+      is_active: false,
+      archived_at: new Date().toISOString(),
+    });
+  }
+
+  public async restoreProduct(id: string): Promise<CatalogWriteResult> {
+    return this.patchProduct(id, {
+      is_active: true,
+      archived_at: null,
+    });
+  }
+
+  public async updateProductStock(id: string, inStock: boolean): Promise<CatalogWriteResult> {
+    return this.patchProduct(id, { in_stock: inStock });
+  }
+
+  public async updateProductPrice(id: string, price: number, mrp?: number, discount?: number): Promise<CatalogWriteResult> {
+    const product = this.products.find((p) => p.id === id);
+    if (!product) return { success: false, error: 'Product not found.' };
+    if (!Number.isFinite(price) || price <= 0) return { success: false, error: 'Price must be a positive number.' };
+    if (mrp != null && mrp < price) return { success: false, error: 'MRP cannot be lower than the selling price.' };
+
+    const nextDiscount =
+      discount !== undefined ? discount : mrp && mrp > price ? Math.round(((mrp - price) / mrp) * 100) : product.discount_percent;
+
+    return this.patchProduct(id, { price, mrp, discount_percent: nextDiscount });
+  }
+
+  public async updateProductImage(
     id: string,
     imageUrl: string,
     referenceVerified = false,
     additionalImages?: string[]
-  ): boolean {
-    const product = this.products.find((p) => p.id === id);
-    if (!product) return false;
-    product.image_url = imageUrl;
-    product.reference_verified = referenceVerified;
-    if (additionalImages) {
-      product.additional_images = additionalImages;
-    }
-    product.updated_at = new Date().toISOString();
-    this.saveProducts();
-    return true;
+  ): Promise<CatalogWriteResult> {
+    if (!imageUrl || !imageUrl.trim()) return { success: false, error: 'Image URL is required.' };
+    return this.patchProduct(id, {
+      image_url: imageUrl,
+      reference_verified: referenceVerified,
+      additional_images: additionalImages ?? [],
+    });
   }
 
-  public deleteProduct(id: string): boolean {
-    const initial = this.products.length;
+  public async deleteProduct(id: string): Promise<CatalogWriteResult> {
+    if (!supabase) return { success: false, error: 'Cloud catalog unavailable (Supabase not configured).' };
+
+    const { error } = await supabase.from('products').delete().eq('id', id);
+    if (error) return { success: false, error: error.message };
+
     this.products = this.products.filter((p) => p.id !== id);
-    if (this.products.length !== initial) {
-      this.saveProducts();
-      this.syncRAGKnowledge();
-      return true;
-    }
-    return false;
+    this.saveProductsCache();
+    this.syncRAGKnowledge();
+    this.notifyChanges();
+    return { success: true };
+  }
+
+  /** Shared write path for single-product partial updates. */
+  private async patchProduct(id: string, patch: Partial<Product>): Promise<CatalogWriteResult> {
+    if (!supabase) return { success: false, error: 'Cloud catalog unavailable (Supabase not configured).' };
+
+    const current = this.products.find((p) => p.id === id);
+    if (!current) return { success: false, error: 'Product not found.' };
+
+    const updated: Product = { ...current, ...patch, id: current.id, updated_at: new Date().toISOString() };
+    const { error } = await supabase
+      .from('products')
+      .update(toDbRow(updated))
+      .eq('id', id);
+    if (error) return { success: false, error: error.message };
+
+    this.applyWrite(updated);
+    return { success: true };
   }
 
   public async triggerRagSync(): Promise<{ success: boolean; synced_products_count: number }> {
@@ -259,7 +372,6 @@ class StoreCatalogService {
     };
   }
 
-
   // --- Category Methods ---
 
   public getCategories(): Category[] {
@@ -268,7 +380,11 @@ class StoreCatalogService {
 
   public addCategory(cat: Category): void {
     this.categories.push(cat);
-    this.saveCategories();
+    try {
+      localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(this.categories));
+    } catch (e) {
+      console.error('Failed to persist categories:', e);
+    }
   }
 
   // --- Knowledge Base Methods ---
@@ -281,12 +397,16 @@ class StoreCatalogService {
     const idx = this.knowledgeBase.findIndex((k) => k.id === id);
     if (idx === -1) return false;
     this.knowledgeBase[idx] = { ...this.knowledgeBase[idx], ...updates };
-    this.saveKnowledge();
+    try {
+      localStorage.setItem(KNOWLEDGE_STORAGE_KEY, JSON.stringify(this.knowledgeBase));
+    } catch (e) {
+      console.error('Failed to persist knowledge base:', e);
+    }
     this.syncRAGKnowledge();
     return true;
   }
 
-  // --- RAG Synchronization ---
+  // --- RAG Synchronization (metadata only; the RAG pipeline is out of scope) ---
 
   public syncRAGKnowledge(): { productCount: number; knowledgeCount: number; timestamp: string } {
     const activeProducts = this.getProducts(false);

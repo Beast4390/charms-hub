@@ -47,6 +47,7 @@ export const ShopOwnerDashboard: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [ragSyncing, setRagSyncing] = useState(false);
+  const [savingProduct, setSavingProduct] = useState(false);
 
   // Form state for Add / Edit
   const [productForm, setProductForm] = useState<Partial<Product>>({
@@ -77,6 +78,8 @@ export const ShopOwnerDashboard: React.FC = () => {
     if (!user) return;
     setLoading(true);
     try {
+      // Cloud catalog is authoritative — wait for the (single-flight) load.
+      await storeCatalog.ensureLoaded();
       const allProds = storeCatalog.getProducts(true);
       setProducts(allProds);
 
@@ -104,69 +107,88 @@ export const ShopOwnerDashboard: React.FC = () => {
   };
 
   // Catalog Actions
-  const handleToggleStock = (product: Product) => {
-    const ok = storeCatalog.updateProductStock(product.id, !product.in_stock);
-    if (ok) {
+  const handleToggleStock = async (product: Product) => {
+    const res = await storeCatalog.updateProductStock(product.id, !product.in_stock);
+    if (res.success) {
       setProducts(storeCatalog.getProducts(true));
       showStatus(`Stock status updated for ${product.name}`);
+    } else if (res.error) {
+      showStatus(res.error, 'error');
     }
   };
 
-  const handleDeleteProduct = (product: Product) => {
+  const handleDeleteProduct = async (product: Product) => {
     if (window.confirm(`Are you sure you want to remove "${product.name}" from the store catalog?`)) {
-      const ok = storeCatalog.deleteProduct(product.id);
-      if (ok) {
+      const res = await storeCatalog.deleteProduct(product.id);
+      if (res.success) {
         setProducts(storeCatalog.getProducts(true));
         showStatus(`Product "${product.name}" deleted`);
+      } else if (res.error) {
+        showStatus(res.error, 'error');
       }
     }
   };
 
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!productForm.name || !productForm.price || !productForm.image_url) {
       showStatus('Please provide product name, price, and image URL', 'error');
       return;
     }
 
-    if (editingProduct) {
-      const updated = storeCatalog.updateProduct(editingProduct.id, productForm);
-      if (updated) {
+    setSavingProduct(true);
+    try {
+      if (editingProduct) {
+        const res = await storeCatalog.updateProduct(editingProduct.id, productForm);
+        if (!res.success || !res.product) {
+          showStatus(res.error || 'Failed to update product', 'error');
+          return;
+        }
         setProducts(storeCatalog.getProducts(true));
         setEditingProduct(null);
-        showStatus(`Product updated: ${updated.name}`);
+        showStatus(`Product updated: ${res.product.name}`);
+      } else {
+        const slug = (productForm.name || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)/g, '');
+
+        if (storeCatalog.getProducts(true).some((p) => p.slug === slug)) {
+          showStatus(`A product named "${productForm.name}" already exists`, 'error');
+          return;
+        }
+
+        const newProd = {
+          name: productForm.name!,
+          slug,
+          category_id: productForm.category_id || 'earrings',
+          category_name:
+            VERIFIED_CATEGORIES.find((c) => c.id === productForm.category_id)?.name ||
+            productForm.category_name ||
+            'Accessories',
+          price: Number(productForm.price),
+          mrp: Number(productForm.mrp || productForm.price),
+          discount_percent: productForm.mrp
+            ? Math.round(((Number(productForm.mrp) - Number(productForm.price)) / Number(productForm.mrp)) * 100)
+            : 0,
+          image_url: productForm.image_url!,
+          description: productForm.description || '',
+          in_stock: productForm.in_stock ?? true,
+          source: 'website' as const,
+          tags: productForm.tags || ['charms-hub', 'verified'],
+        };
+
+        const res = await storeCatalog.addProduct(newProd);
+        if (!res.success || !res.product) {
+          showStatus(res.error || 'Failed to add product', 'error');
+          return;
+        }
+        setProducts(storeCatalog.getProducts(true));
+        setIsAddModalOpen(false);
+        showStatus(`New product added: ${res.product.name}`);
       }
-    } else {
-      const slug = (productForm.name || '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, '');
-
-      const newProd = {
-        name: productForm.name!,
-        slug,
-        category_id: productForm.category_id || 'earrings',
-        category_name:
-          VERIFIED_CATEGORIES.find((c) => c.id === productForm.category_id)?.name ||
-          productForm.category_name ||
-          'Accessories',
-        price: Number(productForm.price),
-        mrp: Number(productForm.mrp || productForm.price),
-        discount_percent: productForm.mrp
-          ? Math.round(((Number(productForm.mrp) - Number(productForm.price)) / Number(productForm.mrp)) * 100)
-          : 0,
-        image_url: productForm.image_url!,
-        description: productForm.description || '',
-        in_stock: productForm.in_stock ?? true,
-        reference_verified: true as const,
-        source: 'website' as const,
-        tags: productForm.tags || ['charms-hub', 'verified'],
-      };
-
-      const created = storeCatalog.addProduct(newProd);
-      setProducts(storeCatalog.getProducts(true));
-      setIsAddModalOpen(false);
-      showStatus(`New product added: ${created.name}`);
+    } finally {
+      setSavingProduct(false);
     }
   };
 
@@ -983,9 +1005,10 @@ export const ShopOwnerDashboard: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#789A99] hover:bg-[#587978] text-white font-bold cursor-pointer"
+                  disabled={savingProduct}
+                  className="px-5 py-2 rounded-xl bg-[#789A99] hover:bg-[#587978] text-white font-bold cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {editingProduct ? 'Save Changes' : 'Create Product'}
+                  {savingProduct ? 'Saving…' : editingProduct ? 'Save Changes' : 'Create Product'}
                 </button>
               </div>
             </form>

@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { storeCatalog } from '../../services/storeCatalog';
 import { VERIFIED_CATEGORIES } from '../../data/categories';
 import { ProductCard } from '../../components/ProductCard/ProductCard';
 import { SearchBar } from '../../components/SearchBar/SearchBar';
-import { Filter, SlidersHorizontal, ArrowUpDown, X, Sparkles } from 'lucide-react';
+import { useCatalog } from '../../hooks/useCatalog';
+import { Filter, SlidersHorizontal, ArrowUpDown, X, Sparkles, AlertTriangle } from 'lucide-react';
 
 export const ProductsPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -13,21 +13,13 @@ export const ProductsPage: React.FC = () => {
   const categoryQuery = searchParams.get('category') || '';
   const searchQuery = searchParams.get('search') || '';
 
-  const [productsList, setProductsList] = useState(() => storeCatalog.getProducts(false));
+  const { products: productsList, loading, error, reload } = useCatalog(false);
   const [selectedCategory, setSelectedCategory] = useState<string>(categoryQuery);
   const [searchTerm, setSearchTerm] = useState<string>(searchQuery);
   const [sortBy, setSortBy] = useState<string>('featured');
   const [inStockOnly, setInStockOnly] = useState<boolean>(false);
   const [priceRange, setPriceRange] = useState<number>(1000);
   const [mobileFilterOpen, setMobileFilterOpen] = useState<boolean>(false);
-
-  useEffect(() => {
-    const handleCatalogUpdate = () => {
-      setProductsList(storeCatalog.getProducts(false));
-    };
-    window.addEventListener('charms_hub_catalog_changed', handleCatalogUpdate);
-    return () => window.removeEventListener('charms_hub_catalog_changed', handleCatalogUpdate);
-  }, []);
 
   useEffect(() => {
     setSelectedCategory(searchParams.get('category') || '');
@@ -92,7 +84,7 @@ export const ProductsPage: React.FC = () => {
       if (sortBy === 'name-asc') return a.name.localeCompare(b.name);
       return 0; // 'featured' preserves original verified ordering
     });
-  }, [selectedCategory, searchTerm, priceRange, inStockOnly, sortBy]);
+  }, [productsList, selectedCategory, searchTerm, priceRange, inStockOnly, sortBy]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -265,7 +257,25 @@ export const ProductsPage: React.FC = () => {
 
         {/* Products Grid Area */}
         <div className="md:col-span-3">
-          {filteredProducts.length === 0 ? (
+          {loading && filteredProducts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-[#5B0E14] rounded-2xl border border-[#F3DDD5] dark:border-[#7A1921] p-8 gap-3">
+              <span className="w-3 h-3 rounded-full bg-[#789A99] dark:bg-[#F1E194] animate-ping" />
+              <p className="text-xs font-semibold text-gray-500 dark:text-stone-400">
+                Loading the verified catalog…
+              </p>
+            </div>
+          ) : error && !loading && filteredProducts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 bg-amber-50 dark:bg-amber-950/60 rounded-2xl border border-amber-200 dark:border-amber-800 p-8 gap-3 text-xs text-amber-800 dark:text-amber-200">
+              <AlertTriangle className="w-6 h-6" />
+              <p className="font-semibold text-center">{error}</p>
+              <button
+                onClick={reload}
+                className="px-4 py-2 rounded-full bg-amber-600 text-white font-bold hover:bg-amber-700 transition cursor-pointer"
+              >
+                Retry
+              </button>
+            </div>
+          ) : filteredProducts.length === 0 ? (
             <div className="text-center py-20 bg-white dark:bg-[#5B0E14] rounded-2xl border border-[#F3DDD5] dark:border-[#7A1921] p-8">
               <Sparkles className="w-8 h-8 text-[#789A99] dark:text-[#F1E194] mx-auto mb-3" />
               <h3 className="text-base font-bold text-[#2B1810] dark:text-[#FCF7DC]">

@@ -165,8 +165,12 @@ ${itemsSummary}
 Payment Status: ${result.order.payment_status}
 Status: ${result.order.status}`;
 
-        // Open WhatsApp in new tab for direct support
-        window.open(`https://wa.me/919876543210?text=${encodeURIComponent(message)}`, '_blank');
+        // Open WhatsApp only when the owner has configured a valid support number.
+        const configuredWhatsApp = await getStoreConfig(STORE_CONFIG_KEYS.supportWhatsApp);
+        const whatsappNumber = configuredWhatsApp?.trim().replace(/[^\d]/g, '') || '';
+        if (whatsappNumber.length >= 7 && whatsappNumber.length <= 15) {
+          window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank');
+        }
       } else {
         setOrderError(result.error || 'Failed to place order. Please try again.');
       }
@@ -178,9 +182,13 @@ Status: ${result.order.status}`;
   };
 
 
-  const handleDownloadInvoice = () => {
+  const handleDownloadInvoice = async () => {
     if (createdInvoice) {
-      downloadInvoicePDF(createdInvoice);
+      try {
+        await downloadInvoicePDF(createdInvoice);
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'Invoice download failed.');
+      }
     }
   };
 

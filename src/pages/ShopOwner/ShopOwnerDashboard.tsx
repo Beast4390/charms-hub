@@ -260,7 +260,11 @@ export const ShopOwnerDashboard: React.FC = () => {
     if (!user) return;
     const inv = await getInvoiceByOrderId(orderId, user);
     if (inv) {
-      downloadInvoicePDF(inv);
+      try {
+        await downloadInvoicePDF(inv, user.role);
+      } catch (error) {
+        showStatus(error instanceof Error ? error.message : 'Invoice download failed', 'error');
+      }
     } else {
       showStatus('Invoice not found for this order', 'error');
     }

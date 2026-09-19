@@ -1,8 +1,18 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Mail, Instagram, Sparkles, ShieldCheck, Heart } from 'lucide-react';
+import { getStoreConfig, STORE_CONFIG_KEYS } from '../../services/storeConfig';
 
 export const Footer: React.FC = () => {
+  const [supportEmail, setSupportEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    void getStoreConfig(STORE_CONFIG_KEYS.supportEmail).then((email) => {
+      const normalizedEmail = email?.trim() || '';
+      setSupportEmail(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) ? normalizedEmail : null);
+    });
+  }, []);
+
   return (
     <footer className="bg-white dark:bg-[#3F070B] border-t border-[#F3DDD5] dark:border-[#7A1921] transition-colors duration-200 mt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -21,13 +31,20 @@ export const Footer: React.FC = () => {
               Your destination for handcrafted Kashmiri earrings, anti-tarnish jewelry, whimsical mystery scoops, quirky stationery, organizers, and hair charms.
             </p>
             <div className="flex items-center gap-3 pt-2">
-              <a
-                href="mailto:cloudfeaxxxx@gmail.com"
-                className="inline-flex items-center gap-2 text-xs font-semibold text-[#2B1810] dark:text-[#FCF7DC] bg-[#FFF1EC] dark:bg-[#7A1921] px-3.5 py-2 rounded-full hover:bg-[#FFD2C2] dark:hover:bg-[#8F1F28] transition"
-              >
-                <Mail className="w-3.5 h-3.5 text-[#789A99] dark:text-[#F1E194]" />
-                <span>cloudfeaxxxx@gmail.com</span>
-              </a>
+              {supportEmail ? (
+                <a
+                  href={`mailto:${supportEmail}`}
+                  className="inline-flex items-center gap-2 text-xs font-semibold text-[#2B1810] dark:text-[#FCF7DC] bg-[#FFF1EC] dark:bg-[#7A1921] px-3.5 py-2 rounded-full hover:bg-[#FFD2C2] dark:hover:bg-[#8F1F28] transition"
+                >
+                  <Mail className="w-3.5 h-3.5 text-[#789A99] dark:text-[#F1E194]" />
+                  <span>{supportEmail}</span>
+                </a>
+              ) : (
+                <span className="inline-flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-stone-400 bg-[#FFF1EC] dark:bg-[#7A1921] px-3.5 py-2 rounded-full">
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>Support email unavailable</span>
+                </span>
+              )}
               <a
                 href="https://instagram.com"
                 target="_blank"

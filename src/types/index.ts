@@ -10,6 +10,7 @@ export interface Category {
   image_url: string;
   item_count?: number;
   featured?: boolean;
+  is_active?: boolean;
 }
 
 export interface ProductVariant {

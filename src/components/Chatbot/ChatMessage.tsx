@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChatMessage as ChatMessageType } from '../../types';
 import { ChatProductCard } from './ChatProductCard';
+import { getWhatsAppLink } from '../../services/storeConfig';
 import { Sparkles, MessageCircle } from 'lucide-react';
 
 interface ChatMessageProps {
@@ -76,15 +77,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onNavigate })
       {/* Optional verified action link */}
       {message.actionType === 'contact_whatsapp' && (
         <div className="mt-2 pl-9">
-          <a
-            href="https://wa.me/919876543210?text=Hello%20Charms%20Hub,%20I%20have%20a%20question"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-700 transition"
+          <button
+            type="button"
+            onClick={() => void getWhatsAppLink('Hello Charms Hub, I have a question').then((url) => window.open(url, '_blank'))}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-700 transition cursor-pointer"
           >
             <MessageCircle className="w-3.5 h-3.5" />
             <span>Ask support on WhatsApp</span>
-          </a>
+          </button>
         </div>
       )}
 

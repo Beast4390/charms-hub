@@ -10,7 +10,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
-const EMBED_MODEL = 'text-embedding-004';
+const EMBED_MODEL = Deno.env.get('GEMINI_EMBED_MODEL') ?? 'text-embedding-004';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -90,6 +90,11 @@ Deno.serve(async (req: Request) => {
     let indexed = 0;
     let failed = 0;
     for (const row of rows ?? []) {
+      // Mark in-flight so duplicate jobs don't double-embed the same rows
+      await supabase
+        .from('knowledge_base')
+        .update({ embedding_status: 'processing' })
+        .eq('id', row.id);
       try {
         const values = await embedText(`${row.title}\n\n${row.content}`, apiKey);
         if (!values) throw new Error('empty embedding');

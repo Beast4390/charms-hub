@@ -1,9 +1,40 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ShieldCheck, Truck, RotateCcw, FileText, AlertCircle, Mail, MessageCircle } from 'lucide-react';
+import { getStoreConfig, STORE_CONFIG_KEYS } from '../../services/storeConfig';
 
 export const PolicyPage: React.FC = () => {
   const { type = 'returns' } = useParams<{ type: string }>();
+  const [supportEmail, setSupportEmail] = useState<string | null>(null);
+  const [supportPhone, setSupportPhone] = useState<string | null>(null);
+  const [supportWhatsApp, setSupportWhatsApp] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      getStoreConfig(STORE_CONFIG_KEYS.supportEmail),
+      getStoreConfig(STORE_CONFIG_KEYS.supportPhone),
+      getStoreConfig(STORE_CONFIG_KEYS.supportWhatsApp),
+    ]).then(([email, phone, whatsapp]) => {
+      if (!active) return;
+      const normalizedEmail = email?.trim() || '';
+      const normalizedPhone = phone?.trim().replace(/[^\d+]/g, '') || '';
+      const normalizedWhatsApp = whatsapp?.trim().replace(/[^\d]/g, '') || '';
+      setSupportEmail(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) ? normalizedEmail : null);
+      setSupportPhone(
+        normalizedPhone.replace(/[^\d]/g, '').length >= 7 && normalizedPhone.replace(/[^\d]/g, '').length <= 15
+          ? normalizedPhone
+          : null
+      );
+      setSupportWhatsApp(
+        normalizedWhatsApp.length >= 7 && normalizedWhatsApp.length <= 15 ? normalizedWhatsApp : null
+      );
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const tabs = [
     { id: 'returns', label: 'Return Policy' },
@@ -128,7 +159,7 @@ export const PolicyPage: React.FC = () => {
               <ul className="list-disc pl-5 space-y-1.5">
                 <li><strong>Order Dispatch:</strong> All orders are packed and dispatched within 24 to 48 business hours.</li>
                 <li><strong>Delivery Window:</strong> Standard courier delivery takes <strong>4 to 7 business days</strong> across India.</li>
-                <li>Tracking links are shared directly on WhatsApp upon shipment.</li>
+                <li>Courier tracking is not currently available through the Charms Hub system.</li>
               </ul>
 
               <h3 className="font-bold text-[#2B1810] dark:text-[#FCF7DC] pt-2">
@@ -185,19 +216,36 @@ export const PolicyPage: React.FC = () => {
 
         {/* Contact Strip */}
         <div className="pt-6 border-t border-[#F3DDD5] dark:border-[#7A1921] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
-          <div className="flex items-center gap-2">
-            <Mail className="w-4 h-4 text-[#789A99] dark:text-[#F1E194]" />
-            <span>Support: cloudfeaxxxx@gmail.com</span>
+          <div className="flex flex-col items-center sm:items-start gap-1">
+            <div className="flex items-center gap-2">
+              <Mail className="w-4 h-4 text-[#789A99] dark:text-[#F1E194]" />
+              {supportEmail ? (
+                <a href={`mailto:${supportEmail}`} className="hover:underline">
+                  Support: {supportEmail}
+                </a>
+              ) : (
+                <span>Support email unavailable</span>
+              )}
+            </div>
+            {supportPhone && (
+              <a href={`tel:${supportPhone}`} className="hover:underline">
+                Phone: {supportPhone}
+              </a>
+            )}
           </div>
-          <a
-            href="https://wa.me/919876543210"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition"
-          >
-            <MessageCircle className="w-3.5 h-3.5" />
-            <span>Chat on WhatsApp Support</span>
-          </a>
+          {supportWhatsApp ? (
+            <a
+              href={`https://wa.me/${supportWhatsApp}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span>Chat on WhatsApp Support</span>
+            </a>
+          ) : (
+            <span className="text-gray-500 dark:text-stone-400">Contact information unavailable</span>
+          )}
         </div>
       </div>
     </div>

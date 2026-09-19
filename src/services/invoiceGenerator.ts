@@ -1,11 +1,16 @@
 import { jsPDF } from 'jspdf';
 import { Invoice, UserRole } from '../types';
 import { logActivity } from './activityLogger';
+import { supabase, isSupabaseConfigured } from './supabase';
 
-export async function generateAndDownloadInvoicePDF(
-  invoice: Invoice,
-  userRole: UserRole = 'customer'
-): Promise<void> {
+const INVOICE_BUCKET = 'invoices';
+const SIGNED_URL_TTL_SECONDS = 300;
+
+function buildInvoiceStoragePath(userId: string, invoiceId: string): string {
+  return `${userId}/${invoiceId}.pdf`;
+}
+
+function createInvoiceDocument(invoice: Invoice): jsPDF {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -193,14 +198,89 @@ export async function generateAndDownloadInvoicePDF(
   doc.setTextColor(140, 140, 140);
   doc.text('This is an electronically generated authentic invoice from Charms Hub AI. No physical signature required.', margin, 285);
 
-  // Save / Trigger Download
-  const filename = `CharmsHub_Invoice_${invoice.invoice_number}.pdf`;
-  doc.save(filename);
+  return doc;
+}
 
-  // Log activity
+async function getAuthenticatedUser(invoice: Invoice, userRole: UserRole): Promise<{ id: string; email: string }> {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error('Invoice storage is unavailable because cloud services are not configured.');
+  }
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) {
+    throw new Error('Please sign in to access this invoice.');
+  }
+  if (userRole === 'customer' && invoice.user_id && invoice.user_id !== data.user.id) {
+    throw new Error('You are not authorized to access this invoice.');
+  }
+  return { id: data.user.id, email: data.user.email || invoice.customer_email };
+}
+
+async function getStoredInvoicePath(
+  invoice: Invoice,
+  userRole: UserRole
+): Promise<{ path: string; userId: string; email: string }> {
+  const user = await getAuthenticatedUser(invoice, userRole);
+  const ownerId = userRole === 'customer' ? user.id : invoice.user_id;
+  if (!ownerId) throw new Error('Invoice ownership information is unavailable.');
+  return { path: buildInvoiceStoragePath(ownerId, invoice.id), userId: user.id, email: user.email };
+}
+
+async function ensureStoredInvoice(
+  invoice: Invoice,
+  userRole: UserRole
+): Promise<{ path: string; userId: string; email: string }> {
+  if (!supabase) throw new Error('Invoice storage is unavailable.');
+  const stored = await getStoredInvoicePath(invoice, userRole);
+  const existing = await supabase.storage.from(INVOICE_BUCKET).createSignedUrl(stored.path, SIGNED_URL_TTL_SECONDS);
+  if (!existing.error && existing.data?.signedUrl) return stored;
+
+  const pdfBlob = createInvoiceDocument(invoice).output('blob');
+  const { error: uploadError } = await supabase.storage
+    .from(INVOICE_BUCKET)
+    .upload(stored.path, pdfBlob, { contentType: 'application/pdf', cacheControl: '300', upsert: false });
+
+  if (uploadError) {
+    const concurrent = await supabase.storage
+      .from(INVOICE_BUCKET)
+      .createSignedUrl(stored.path, SIGNED_URL_TTL_SECONDS);
+    if (concurrent.error || !concurrent.data?.signedUrl) {
+      throw new Error(`Failed to store invoice securely: ${uploadError.message}`);
+    }
+  }
+  return stored;
+}
+
+export async function getInvoiceSignedUrl(invoice: Invoice, userRole: UserRole = 'customer'): Promise<string> {
+  if (!supabase) throw new Error('Invoice storage is unavailable.');
+  const stored = await ensureStoredInvoice(invoice, userRole);
+  const { data, error } = await supabase.storage
+    .from(INVOICE_BUCKET)
+    .createSignedUrl(stored.path, SIGNED_URL_TTL_SECONDS);
+  if (error || !data?.signedUrl) {
+    throw new Error(`Failed to create a secure invoice link: ${error?.message || 'unknown error'}`);
+  }
+  return data.signedUrl;
+}
+
+export async function generateAndDownloadInvoicePDF(
+  invoice: Invoice,
+  userRole: UserRole = 'customer'
+): Promise<void> {
+  const stored = await ensureStoredInvoice(invoice, userRole);
+  const signedUrl = await getInvoiceSignedUrl(invoice, userRole);
+  const response = await fetch(signedUrl);
+  if (!response.ok) throw new Error('Failed to retrieve the stored invoice.');
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = `CharmsHub_Invoice_${invoice.invoice_number}.pdf`;
+  anchor.click();
+  URL.revokeObjectURL(objectUrl);
+
   await logActivity({
-    userId: invoice.user_id,
-    userEmail: invoice.customer_email,
+    userId: stored.userId,
+    userEmail: stored.email,
     role: userRole,
     eventType: 'invoice_downloaded',
     entityType: 'invoice',

@@ -127,6 +127,33 @@ class StoreCatalogService {
     }
   }
 
+  /** Categories come from the cloud (authoritative), with live item counts
+   *  computed from the current catalog instead of stale static numbers. */
+  private async loadCategoriesFromCloud() {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .order('name', { ascending: true });
+    if (error || !data || data.length === 0) {
+      if (error) console.warn('Cloud categories unavailable, using cached:', error.message);
+      return;
+    }
+    this.categories = data.map((row) => ({
+      id: row.id as string,
+      name: row.name as string,
+      slug: row.slug as string,
+      description: (row.description as string) || undefined,
+      image_url: (row.image_url as string) || '',
+      featured: row.featured !== false,
+      is_active: row.is_active !== false,
+      item_count: this.products.filter((p) => p.category_id === row.id && p.is_active !== false).length,
+    }));
+    try {
+      localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(this.categories));
+    } catch { /* cache best-effort */ }
+  }
+
   // --- Cloud synchronization ---
 
   public getCatalogStatus(): CatalogStatus {
@@ -162,6 +189,7 @@ class StoreCatalogService {
         this.cloudLoaded = true;
         this.catalogError = null;
         this.saveProductsCache();
+        void this.loadCategoriesFromCloud();
       } else {
         // Fresh project without the seed migration — keep the bundled
         // verified catalog visible rather than an empty storefront.
@@ -378,13 +406,73 @@ class StoreCatalogService {
     return [...this.categories];
   }
 
-  public addCategory(cat: Category): void {
-    this.categories.push(cat);
-    try {
-      localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(this.categories));
-    } catch (e) {
-      console.error('Failed to persist categories:', e);
+  public getCategoryById(id: string): Category | undefined {
+    return this.categories.find((c) => c.id === id);
+  }
+
+  /** Cloud-backed category management (RLS: admin write). */
+  public async saveCategory(input: {
+    id?: string;
+    name: string;
+    slug?: string;
+    description?: string;
+    image_url?: string;
+    featured?: boolean;
+  }): Promise<CatalogWriteResult> {
+    if (!supabase) return { success: false, error: 'Cloud services are not configured.' };
+    if (!input.name?.trim()) return { success: false, error: 'Category name is required.' };
+
+    const slug =
+      input.slug?.trim() ||
+      input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+    if (this.categories.some((c) => c.slug === slug && c.id !== input.id)) {
+      return { success: false, error: `A category with the name "${input.name}" already exists.` };
     }
+
+    const row: Record<string, unknown> = {
+      name: input.name.trim(),
+      slug,
+      description: input.description?.trim() || null,
+      image_url: input.image_url?.trim() || null,
+      featured: input.featured ?? true,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (input.id) {
+      const { error } = await supabase.from('categories').update(row).eq('id', input.id);
+      if (error) return { success: false, error: error.message };
+      this.categories = this.categories.map((c) =>
+        c.id === input.id ? { ...c, ...row, description: row.description as string | undefined } as Category : c,
+      );
+    } else {
+      const id = `cat-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+      const { error } = await supabase.from('categories').insert({ ...row, id });
+      if (error) return { success: false, error: error.message };
+      this.categories.push({
+        id,
+        name: row.name as string,
+        slug: row.slug as string,
+        description: row.description as string | undefined,
+        image_url: (row.image_url as string) || '',
+        featured: row.featured as boolean,
+        is_active: true,
+      });
+    }
+    this.notifyChanges();
+    return { success: true };
+  }
+
+  public async setCategoryActive(id: string, isActive: boolean): Promise<CatalogWriteResult> {
+    if (!supabase) return { success: false, error: 'Cloud services are not configured.' };
+    const { error } = await supabase
+      .from('categories')
+      .update({ is_active: isActive, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) return { success: false, error: error.message };
+    this.categories = this.categories.map((c) => (c.id === id ? { ...c, is_active: isActive } : c));
+    this.notifyChanges();
+    return { success: true };
   }
 
   // --- Knowledge Base Methods ---

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { MessageCircle, X, Send } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
+import { getWhatsAppLink } from '../../services/storeConfig';
 
 export const WhatsAppButton: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -15,7 +16,7 @@ export const WhatsAppButton: React.FC = () => {
     const fullText = encodeURIComponent(
       (message || 'Hello Charms Hub! I would like to inquire about your products.') + orderDetails
     );
-    window.open(`https://wa.me/919876543210?text=${fullText}`, '_blank');
+    void getWhatsAppLink(decodeURIComponent(fullText)).then((url) => window.open(url, '_blank'));
     setIsOpen(false);
     setMessage('');
   };

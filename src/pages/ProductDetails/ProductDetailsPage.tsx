@@ -4,6 +4,7 @@ import { VERIFIED_PRODUCTS } from '../../data/verifiedProducts';
 import { storeCatalog } from '../../services/storeCatalog';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
+import { getWhatsAppLink } from '../../services/storeConfig';
 import { ProductCard } from '../../components/ProductCard/ProductCard';
 import {
   ShoppingBag,
@@ -142,7 +143,7 @@ export const ProductDetailsPage: React.FC = () => {
     const text = encodeURIComponent(
       `Hello Charms Hub! I want to inquire about purchasing:\n\n*${product.name}*\nPrice: ₹${product.price} (Qty: ${quantity})\nProduct Link: ${window.location.href}`
     );
-    window.open(`https://wa.me/919876543210?text=${text}`, '_blank');
+    void getWhatsAppLink(decodeURIComponent(text)).then((url) => window.open(url, '_blank'));
   };
 
   return (

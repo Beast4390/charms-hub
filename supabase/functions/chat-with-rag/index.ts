@@ -13,9 +13,13 @@
 // ============================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+// Server-side configuration (Edge Function secrets/env). Never exposed to
+// the browser — only derived, non-secret values are returned to clients.
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
-const EMBED_MODEL = 'text-embedding-004';
-const GEN_MODEL = 'gemini-2.0-flash';
+const GEN_MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-2.0-flash';
+const EMBED_MODEL = Deno.env.get('GEMINI_EMBED_MODEL') ?? 'text-embedding-004';
+const SIMILARITY_THRESHOLD = Number(Deno.env.get('RAG_SIMILARITY_THRESHOLD') ?? '0.72');
+const MAX_CHUNKS = Number(Deno.env.get('RAG_MAX_CHUNKS') ?? '3');
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -171,6 +175,30 @@ async function generateAnswer(question: string, contextBlocks: string, apiKey: s
   }
 }
 
+/**
+ * Grounding guard: rejects Gemini output that introduces currency amounts
+ * or percentages not present in the verified context. Deterministic and
+ * cheap — on failure the verified retrieval result is returned instead.
+ */
+function groundingGuardPasses(answer: string, verifiedContext: string, allowedPrices: string[]): boolean {
+  const extractAmounts = (text: string) =>
+    (text.match(/(?:₹|Rs\.?)\s?\d[\d,]*/gi) ?? []).map((a) =>
+      a.replace(/₹/g, '').replace(/Rs\.?/gi, '').replace(/[\s,]/g, '')
+    );
+  const allowed = new Set([
+    ...allowedPrices.map((p) => String(Number(p))),
+    ...extractAmounts(verifiedContext),
+  ]);
+  for (const amount of extractAmounts(answer)) {
+    if (!allowed.has(amount)) return false;
+  }
+  const contextPercents = new Set((verifiedContext.match(/\d+(?:\.\d+)?\s?%/g) ?? []).map((p) => p.replace(/\s+/g, '')));
+  for (const pct of answer.match(/\d+(?:\.\d+)?\s?%/g) ?? []) {
+    if (!contextPercents.has(pct.replace(/\s+/g, ''))) return false;
+  }
+  return true;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: CORS });
@@ -237,8 +265,8 @@ Deno.serve(async (req: Request) => {
         if (qEmbed) {
           const { data, error } = await supabase.rpc('match_knowledge_base', {
             p_query_embedding: qEmbed,
-            p_match_threshold: 0.72,
-            p_match_count: 3,
+            p_match_threshold: SIMILARITY_THRESHOLD,
+            p_match_count: MAX_CHUNKS,
           });
           if (error) console.error('Vector search failed:', error.message);
           knowledge = (data as KnowledgeRow[]) ?? [];
@@ -261,11 +289,16 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // 5. Grounded generation
+    // 5. Grounded generation, guarded against unsupported claims
     let answer: string | null = null;
     if (geminiKey) {
       const blocks: string[] = [];
+      const allowedPrices: string[] = [];
       if (products.length > 0) {
+        for (const p of products) {
+          allowedPrices.push(String(p.price));
+          if (p.mrp) allowedPrices.push(String(p.mrp));
+        }
         blocks.push('CURRENT PRODUCT RECORDS (exact, authoritative):\n' + products
           .map((p) => `- ${p.name} | Rs.${p.price}${p.mrp ? ` (MRP Rs.${p.mrp})` : ''} | category: ${p.category_name} | ${p.in_stock ? 'in stock' : 'OUT OF STOCK'}`)
           .join('\n'));
@@ -276,9 +309,18 @@ Deno.serve(async (req: Request) => {
         blocks.push('VERIFIED BUSINESS KNOWLEDGE:\n' + knowledge.map((k) => `- [${k.category}] ${k.title}: ${k.content}`).join('\n'));
       }
       if (blocks.length > 0) {
-        answer = await generateAnswer(question, blocks.join('\n\n'), geminiKey);
-        if (answer) grounding = 'gemini';
-        else warning = 'AI generation failed; verified context returned instead';
+        const contextText = blocks.join('\n\n');
+        const generated = await generateAnswer(question, contextText, geminiKey);
+        if (generated && groundingGuardPasses(generated, contextText, allowedPrices)) {
+          answer = generated;
+          grounding = 'gemini';
+        } else if (generated) {
+          // Guard rejected the output — never present unsupported claims.
+          console.error('Grounding guard rejected Gemini output');
+          warning = 'Generated answer failed grounding validation; verified context returned instead';
+        } else {
+          warning = 'AI generation failed; verified context returned instead';
+        }
       } else {
         answer = "I don't have verified information about that.";
         grounding = 'gemini';
@@ -286,7 +328,15 @@ Deno.serve(async (req: Request) => {
     }
 
     return new Response(
-      JSON.stringify({ intent, products, knowledge, answer, grounding, warning }),
+      JSON.stringify({
+        intent,
+        products,
+        knowledge,
+        answer,
+        grounding,
+        warning,
+        config: { model: GEN_MODEL, embed_model: EMBED_MODEL, similarity_threshold: SIMILARITY_THRESHOLD, max_chunks: MAX_CHUNKS },
+      }),
       { headers: { ...CORS, 'Content-Type': 'application/json' } },
     );
   } catch (err) {

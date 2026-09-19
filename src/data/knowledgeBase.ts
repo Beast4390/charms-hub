@@ -60,7 +60,7 @@ export const VERIFIED_KNOWLEDGE_BASE: KnowledgeItem[] = [
   {
     id: 'kb-contact-support',
     title: 'Customer Support and Contact',
-    content: 'You can reach Charms Hub customer support via WhatsApp through the website button or by emailing cloudfeaxxxx@gmail.com.',
+    content: 'You can reach Charms Hub customer support through the website contact options when they are configured.',
     category: 'general',
     source: 'Charms Hub footer and support',
     metadata: { type: 'contact' }

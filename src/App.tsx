@@ -1,8 +1,9 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
+import { UserRole } from './types';
 
 import { TopBanner } from './components/TopBanner/TopBanner';
 import { Header } from './components/Header/Header';
@@ -22,6 +23,21 @@ import { RegisterPage } from './pages/Auth/RegisterPage';
 import { PolicyPage } from './pages/Policy/PolicyPage';
 import { ShopOwnerDashboard } from './pages/ShopOwner/ShopOwnerDashboard';
 import { DeveloperDashboard } from './pages/Developer/DeveloperDashboard';
+
+function RoleRoute({ role, children }: { role: UserRole; children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div className="p-8 text-center">Checking access...</div>;
+  }
+  if (!user) {
+    return <Navigate to="/auth/login" replace />;
+  }
+  if (user.role !== role) {
+    return <Navigate to="/" replace />;
+  }
+  return <>{children}</>;
+}
 
 export default function App() {
   return (
@@ -45,8 +61,22 @@ export default function App() {
                   <Route path="/categories" element={<CategoriesPage />} />
                   <Route path="/cart" element={<CartPage />} />
                   <Route path="/account" element={<AccountPage />} />
-                  <Route path="/owner" element={<ShopOwnerDashboard />} />
-                  <Route path="/developer" element={<DeveloperDashboard />} />
+                  <Route
+                    path="/owner"
+                    element={
+                      <RoleRoute role="shop_owner">
+                        <ShopOwnerDashboard />
+                      </RoleRoute>
+                    }
+                  />
+                  <Route
+                    path="/developer"
+                    element={
+                      <RoleRoute role="developer">
+                        <DeveloperDashboard />
+                      </RoleRoute>
+                    }
+                  />
                   <Route path="/auth/login" element={<LoginPage />} />
                   <Route path="/auth/register" element={<RegisterPage />} />
                   <Route path="/policy" element={<PolicyPage />} />

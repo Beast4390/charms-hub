@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getOrdersByUser, getInvoiceByOrderId, cancelOrder } from '../../services/orderService';
-import { downloadInvoicePDF } from '../../services/invoiceGenerator';
+import { downloadInvoicePDF, getInvoiceSignedUrl } from '../../services/invoiceGenerator';
 import { logActivity } from '../../services/activityLogger';
 import { OrderTimeline } from '../../components/OrderTimeline/OrderTimeline';
 import { Order, Invoice } from '../../types';
@@ -80,19 +80,14 @@ export const AccountPage: React.FC = () => {
     setEditing(false);
   };
 
-  const handleDownloadInvoice = (orderId: string) => {
+  const handleDownloadInvoice = async (orderId: string) => {
     const inv = invoicesMap[orderId];
     if (inv) {
-      downloadInvoicePDF(inv);
-      void logActivity({
-        userId: user!.id,
-        userEmail: user!.email,
-        role: user!.role,
-        eventType: 'invoice_downloaded',
-        entityType: 'invoice',
-        entityId: inv.id,
-        metadata: { invoice_number: inv.invoice_number, order_number: inv.order_number },
-      });
+      try {
+        await downloadInvoicePDF(inv, user!.role);
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'Invoice download failed.');
+      }
     } else {
       alert('Invoice is being generated for this order.');
     }
@@ -104,14 +99,19 @@ export const AccountPage: React.FC = () => {
       alert('Invoice is being generated for this order.');
       return;
     }
-    const shareText = `Charms Hub Invoice ${inv.invoice_number} (Order ${inv.order_number}) — Total Rs.${inv.total_amount}`;
     try {
+      const signedUrl = await getInvoiceSignedUrl(inv, user!.role);
       if (navigator.share) {
-        await navigator.share({ title: `Charms Hub Invoice ${inv.invoice_number}`, text: shareText });
+        await navigator.share({
+          title: `Charms Hub Invoice ${inv.invoice_number}`,
+          text: `Charms Hub Invoice ${inv.invoice_number} (Order ${inv.order_number})`,
+          url: signedUrl,
+        });
       } else {
-        await navigator.clipboard.writeText(shareText);
-        alert('Invoice summary copied to clipboard.');
+        await navigator.clipboard.writeText(signedUrl);
+        alert('Secure invoice link copied to clipboard. It expires in 5 minutes.');
       }
+      // Sharing is logged only after the share/link-copy action succeeds.
       void logActivity({
         userId: user!.id,
         userEmail: user!.email,
@@ -121,8 +121,11 @@ export const AccountPage: React.FC = () => {
         entityId: inv.id,
         metadata: { invoice_number: inv.invoice_number, order_number: inv.order_number },
       });
-    } catch {
-      /* share cancelled */
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return;
+      }
+      alert(error instanceof Error ? error.message : 'Invoice sharing failed. Please try again.');
     }
   };
 

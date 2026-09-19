@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, Trash2, Plus, Minus, ShoppingBag, ArrowRight, MessageCircle, Sparkles } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
+import { getWhatsAppLink } from '../../services/storeConfig';
 
 export const CartDrawer: React.FC = () => {
   const {
@@ -33,7 +34,7 @@ export const CartDrawer: React.FC = () => {
     const text = encodeURIComponent(
       `Hello Charms Hub! I would like to place an order for the items in my cart:` + orderDetails
     );
-    window.open(`https://wa.me/919876543210?text=${text}`, '_blank');
+    void getWhatsAppLink(decodeURIComponent(text)).then((url) => window.open(url, '_blank'));
   };
 
   return (

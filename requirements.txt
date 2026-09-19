@@ -1,0 +1,3 @@
+# This repository does not use Python runtime code or Python dependencies.
+# It is a React/Vite/TypeScript application with Supabase Edge Functions.
+# JavaScript and TypeScript dependencies are managed through package.json.
